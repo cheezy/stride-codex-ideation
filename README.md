@@ -115,6 +115,15 @@ The skill drives a round-based question loop (≤ 4 questions per round) and gat
 > Activate stride-ideation-ideate with "--continue docs/ideation/2026-05-12T120000-foo-requirements.md"
 ```
 
+#### Session experience
+
+The `stride-ideation-ideate` session is guided, recoverable, and human-in-control. Before every round a display-only recap shows each of the seven gated sections as `solid` / `thin` / `empty`; every gated-section question carries an "I'm not sure — propose candidates" option; and the in-progress draft is autosaved to a gitignored scratch file under `.stride/` so an interruption is recoverable. Two mandatory, profile-independent checkpoints stress-test the design before the doc is written:
+
+- **Round-4 premortem** — inverts the framing to surface the *single* most likely failure mode, folded back into Assumptions as the riskiest entry.
+- **Challenge gate** — runs after the premortem (and the Round-5 MVP-design batch under `lean-startup`) and **before** the reviewer pass. It stress-tests the design via four components: an assumption-confidence audit (rate every assumption `high` / `medium` / `low`), a blind-spot scan, two distinct alternative approaches, and a cost / risk / complexity / timeline trade-off comparison. The gate is surfaced as a single multi-select decision through Codex CLI's question UI with an explicit **"Challenge nothing — write as-is"** choice. It is **advisory and never blocks the write**, and runs identically under every profile. Confidence ratings fold into the Assumptions entries in place; the blind spots, the two alternatives, and the trade-off comparison fold into a new optional **Design challenge** section (not one of the seven gated sections).
+
+After the gate, the advisory `requirements-reviewer` pass surfaces any findings as a multi-select decision (with an "Address none — write as-is" choice) that feeds at most one refinement round; like the gate, it never blocks the write.
+
 ### `stride-ideation-stridify` — decompose + POST to Stride
 
 After ideating (or against any compatible requirements doc), activate the second skill against the requirements path:

@@ -1,6 +1,6 @@
 # fixtures/
 
-Smoke-test and regression fixtures for the `stride-copilot-ideation` plugin (copilot port of `cheezy/stride-ideation`). Each fixture pair (`*-requirements.md` + `*-stride-batch.json`) shares a timestamp prefix and demonstrates a different shape of decomposition output. The fixtures are copied verbatim from upstream so a Copilot run against the `stride-ideation-stridify` skill should produce comparable shapes when the decomposer agent is invoked against the same requirements doc.
+Smoke-test and regression fixtures for the `stride-codex-ideation` plugin (Codex CLI port of `cheezy/stride-ideation`). Each fixture pair (`*-requirements.md` + `*-stride-batch.json`) shares a timestamp prefix and demonstrates a different shape of decomposition output. The fixtures are copied verbatim from upstream so a Codex CLI run against the `stride-ideation-stridify` skill should produce comparable shapes when the decomposer agent is invoked against the same requirements doc.
 
 The fixtures serve two purposes:
 
@@ -43,6 +43,17 @@ The dependency between G1 and G2 is hard: G2's first task literally cannot be sc
 
 This is the shape the multi-goal split rule was designed for — code-coupled work that exceeds the soft cap and admits a clean seam.
 
+## Protocol-output fixture (no batch pair)
+
+### 4. Challenge-gate output — `saved-filters-challenge-gate`
+
+- **Requirements:** `2026-05-12T120300-saved-filters-challenge-gate-requirements.md`
+- **Batch:** none — this fixture is a standalone `stride-ideation-ideate` output, not a `stride-ideation-stridify` decomposition pair.
+
+Unlike the three pairs above, this fixture exists to demonstrate the **challenge-gate output shape** (added in the `## Challenge gate` section of `skills/stride-ideation/SKILL.md` and the Step-6 `## Design challenge` template in `skills/stride-ideation-ideate/SKILL.md`). It shows what a committed requirements doc looks like *after* the gate has run: a `## Design challenge` section holding two distinct alternatives and a cost/risk/complexity/timeline trade-off comparison, plus an `## Assumptions` section whose entries carry the gate's `(high)`/`(medium)`/`(low)` confidence ratings folded in place (alongside the `(R)` riskiest marker).
+
+It is the calibration reference for "what good challenge-gate output looks like," and it is the fixture the `lib/test-challenge-gate.sh` unit suite and Stage 6 of `lib/run_smoke_test.sh` assert against. Because it is not a decomposition pair, it has no `*-stride-batch.json` and is not part of the drift-check / validator regression loop.
+
 ## Re-running and updating
 
 To verify the fixtures match current decomposer behavior:
@@ -54,7 +65,7 @@ for f in fixtures/*-stride-batch.json; do
 done
 
 # Re-activate stride-ideation-stridify against each requirements fixture and diff
-# (interactive — requires a Copilot CLI session; will also POST to the
+# (interactive — requires a Codex CLI session; will also POST to the
 # Stride API, so prefer a non-prod workspace for diffing-only runs)
 # > Activate stride-ideation-stridify against fixtures/2026-05-12T120000-dark-mode-toggle-requirements.md
 # diff fixtures/2026-05-12T120000-dark-mode-toggle-stride-batch.json <newly-written-file>

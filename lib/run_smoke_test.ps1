@@ -208,7 +208,7 @@ if (Test-Path -LiteralPath $gateFixture) {
         Fail "challenge-gate fixture is missing the '## Design challenge' section"
     }
 
-    $altCount = ($gateLines | Where-Object { $_ -match '\*\*Alternative [A-Z]' }).Count
+    $altCount = @($gateLines | Where-Object { $_ -match '\*\*Alternative [A-Z]' }).Count
     if ($altCount -ge 2) {
         Pass "Design challenge names at least two alternatives"
     } else {
