@@ -4,6 +4,17 @@ All notable changes to the `stride-codex-ideation` plugin are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-26
+
+### Added
+
+- **Challenge gate (W1370)** — a new mandatory, profile-independent design stress-test ported from the canonical [`cheezy/stride-ideation`](https://github.com/cheezy/stride-ideation) plugin and adapted to the Codex CLI question/selection primitive (never Claude Code's `AskUserQuestion`). It runs after the round-4 premortem (and the Round-5 MVP-design batch under `lean-startup`) and **before** the reviewer pass, over the assembled draft. Four components, run in order: (a) an **assumption-confidence audit** rating every Assumptions entry `high` / `medium` / `low`; (b) a **blind-spot scan** for unstated dependencies, omitted stakeholders, untested edge cases, and failure modes the premortem missed; (c) **alternative generation** of two distinct alternative approaches; and (d) a **trade-off analysis** comparing the proposed design against the two alternatives across cost, risk, complexity, and timeline. The gate is surfaced as a single multi-select decision with an explicit "Challenge nothing — write as-is" option, is advisory and **never blocks the write**, and runs even under `--continue`. Confidence ratings fold into the Assumptions entries in place; the blind spots, the two alternatives, and the trade-off comparison fold into a new optional `## Design challenge` section (not one of the seven hard-gated sections, and never surfaced in the round recap). Implemented in `skills/stride-ideation/SKILL.md` (the `## Challenge gate` section) and `skills/stride-ideation-ideate/SKILL.md` (the Step-5 enforcement bullet and the Step-6 confidence-rated Assumptions + `## Design challenge` template).
+- **Challenge-gate documentation, fixture, and tests (W1371)** — a "Session experience" subsection in `README.md` documenting the gate's four components, placement, and advisory semantics; a catalogued calibration fixture `fixtures/2026-05-12T120300-saved-filters-challenge-gate-requirements.md` exhibiting a `## Design challenge` section (two alternatives + a cost/risk/complexity/timeline trade-off table) and confidence-rated Assumptions; a new `Stage 6: challenge-gate fixture shape` check in `lib/run_smoke_test.sh` + `lib/run_smoke_test.ps1` (the bash smoke test now reports **14 passed, 0 failed**); and a standalone `lib/test-challenge-gate.{sh,ps1}` suite (8 assertions each — four positive shape checks plus three negative controls guarding against vacuous passes). `fixtures/README.md` gains a section-4 catalogue entry, and two stale `stride-copilot-ideation` / `Copilot` references are corrected to `stride-codex-ideation` / `Codex CLI`.
+
+### Source
+
+Challenge-gate port: W1370 (skill + ideate surface), W1371 (README + fixtures + tests), W1372 (this release).
+
 ## [0.1.1] - 2026-06-22
 
 ### Fixed
