@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Unit tests for the source_spec / source_spec_sha256 stamping logic used by
-# /stride-ideation:decompose.
+# the stride-ideation-stridify skill.
 #
-# The stamping itself runs inside the slash-command body (commands/decompose.md
-# Step 5 + Step 8), but the two failure-mode behaviors the AC calls out are
+# The stamping itself runs inside the stride-ideation-stridify skill body
+# (skills/stride-ideation-stridify/SKILL.md Step 6 + Step 8b), but the two
+# failure-mode behaviors the AC calls out are
 # testable in isolation:
 #
 #   1. The recorded SHA matches `shasum -a 256` of the supplied requirements
@@ -61,7 +62,7 @@ fi
 # --- lowercasing of hex output --------------------------------------------
 #
 # The stamping pipeline pipes shasum's output through `tr 'A-Z' 'a-z'` to force
-# lowercase hex so /ship's drift check compares byte-for-byte. Validate that
+# lowercase hex so the drift check (lib/drift_check.py) compares byte-for-byte. Validate that
 # the lowercasing actually happens.
 
 UPPER_HEX_SAMPLE="ABCDEF0123456789"

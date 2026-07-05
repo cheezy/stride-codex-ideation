@@ -5,11 +5,11 @@ Usage:
     python3 lib/strip_audit_fields.py <path-to-stride-batch.json>
 
 Reads the file at the given path, removes the three local-audit fields
-(`source_spec`, `source_spec_sha256`, `decomposition_notes`) that
-`/stride-ideation:decompose` stamped at the root, and prints the
+(`source_spec`, `source_spec_sha256`, `decomposition_notes`) that the
+stride-ideation-stridify skill stamped at the root, and prints the
 API-ready payload to stdout. Exits 0 on success.
 
-The resulting JSON is what `/stride-ideation:ship` POSTs to
+The resulting JSON is what the stride-ideation-stridify skill's Step 9 POSTs to
 Stride's `/api/tasks/batch` endpoint. The three stripped fields are
 useful for local audit and drift detection but the Stride API does
 not accept them and silently drops them — better to strip
