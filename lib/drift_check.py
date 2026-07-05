@@ -12,9 +12,13 @@ Exit codes:
     2  source_spec stamped but the referenced file can't be read or hashed
        (stderr contains the underlying error)
 
-The helper does NOT prompt the user — that is the slash-command body's
-concern. The helper's job is purely detection: report drift or no drift
-via exit code, and surface a precise diagnostic on stderr.
+This helper is a standalone fixture-regression / audit tool — its only
+callers are `lib/run_smoke_test.sh` Stage 2 and `lib/test-drift-check.sh`.
+The stride-ideation-stridify skill deliberately OMITS drift checking: it
+writes and POSTs the batch JSON in the same invocation, so the source doc
+cannot drift between decomposition and the POST. The helper does NOT prompt
+the user; its job is purely detection: report drift or no drift via exit
+code, and surface a precise diagnostic on stderr.
 
 Behavior contract:
 
