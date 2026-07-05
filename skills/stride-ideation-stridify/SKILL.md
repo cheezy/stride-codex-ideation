@@ -368,9 +368,10 @@ computed by Step 5; for the run that produced this file, that path was
 
     python3 <plugin-root>/lib/validate_batch.py <BATCH_TARGET_PATH>
 
-to confirm the JSON parses against the validator's five named checks
+to confirm the JSON parses against the validator's six named fatal checks
 (parse_error / wrong_root_key / empty_goals / goal_missing_field /
-bad_dependency_index). On success, follow Step 9 of this skill
+bad_dependency_index / length_limit; advisory scored-field warnings on
+stderr do not block). On success, follow Step 9 of this skill
 manually: strip audit fields via `lib/strip_audit_fields.py`, POST the result
 to `$STRIDE_API_URL/api/tasks/batch` with a Bearer token from
 `.stride_auth.md`, and render the created identifiers per Step 10.
@@ -425,7 +426,7 @@ fi
 rm -f "$TMP_JSON.err"
 ```
 
-The validator enforces five named checks, in order:
+The validator enforces six named **fatal** checks, in order:
 
 | Check | Failure mode | Example error message |
 |---|---|---|
@@ -434,8 +435,11 @@ The validator enforces five named checks, in order:
 | (c) `empty_goals` | `goals` missing, not an array, or empty | `root.goals is an empty array — the decomposer returned no goals` |
 | (d) `goal_missing_field` | A goal lacks `title`, `type`, or `tasks`, or a task is malformed | `goals[0] is missing required field 'title'` |
 | (e) `bad_dependency_index` | A task's `dependencies[]` index is out of range, negative, or a forward / self reference | `goals[0].tasks[1].dependencies references index 5 but goal only has 2 tasks (valid indices 0..1)` |
+| (f) `length_limit` | A goal/task `title` or a `security_considerations` element exceeds 255 Unicode code points (the server binds these to `varchar(255)`) | `goals[0].tasks[0].title is 256 characters — the server column is varchar(255) and rejects longer values` |
 
-A validation failure here is an **agent regression** — the requirements-decomposer agent's contract guarantees a valid root-key=`goals` JSON. If you see one, the agent's prompt has drifted; surface the validator message verbatim and stop. The validator does NOT check per-task Stride-API field shapes — those are the decomposer agent's responsibility, and any slip-through surfaces as a verbatim 422 in Step 9.
+After all six fatal checks pass, the validator runs an **advisory scored-field completeness pass**: it prints a `stride-ideation: warning:` line to **stderr** (exit code stays `0`) for any task whose review-queue scored field (`acceptance_criteria`, `testing_strategy`, `security_considerations`, `pitfalls`, `patterns_to_follow`) is missing or empty — each renders an empty review-queue pill once shipped. These warnings are informational and never block the ship; the batch is still valid.
+
+A **fatal** validation failure here is an **agent regression** — the requirements-decomposer agent's contract guarantees a valid root-key=`goals` JSON within the length bounds. If you see one, the agent's prompt has drifted; surface the validator message verbatim and stop. Length is checked only on the fields the server actually bounds (`title` and each `security_considerations` element); `pitfalls`/`key_files` are JSONB (unbounded). Beyond `length_limit` and the advisory pass, the validator does NOT check per-task Stride-API field shapes — those are the decomposer agent's responsibility, and any slip-through surfaces as a verbatim 422 in Step 9.
 
 After the validator returns zero, also confirm that `decomposition_notes` exists at the root. It is required by the agent contract for documenting cross-goal claim ordering. If the key is missing, set it to an empty string before the next sub-step and emit a one-line warning — but do NOT fail; some single-goal decompositions legitimately have nothing cross-goal to document.
 

@@ -26,6 +26,49 @@ function Invoke-Validator([string]$JsonText) {
     return @{ rc = $rc; stderr = $errText }
 }
 
+# The five review-queue scored fields as a reusable JSON fragment, so a task
+# under a length test does not also trip the advisory scored-field pass.
+$Scored = '"acceptance_criteria":"It works","testing_strategy":{"unit_tests":["one"]},"security_considerations":["None - test fixture"],"pitfalls":["none"],"patterns_to_follow":"existing"'
+
+function Assert-FailsWith($label, $json, $needle) {
+    # Validator must exit non-zero AND stderr must contain the substring.
+    $r = Invoke-Validator $json
+    if ($r.rc -ne 0 -and ($r.stderr -match [regex]::Escape($needle))) {
+        Pass $label
+    } else {
+        Fail $label ("rc=$($r.rc) stderr=$($r.stderr)")
+    }
+}
+
+function Assert-WarnsWith($label, $json, $needle) {
+    # Validator must exit 0 AND stderr must contain the advisory warning.
+    $r = Invoke-Validator $json
+    if ($r.rc -eq 0 -and ($r.stderr -match [regex]::Escape($needle))) {
+        Pass $label
+    } else {
+        Fail $label ("rc=$($r.rc) stderr=$($r.stderr)")
+    }
+}
+
+function Assert-Silent($label, $json) {
+    # Validator must exit 0 with no output at all — no warnings, no errors.
+    $r = Invoke-Validator $json
+    if ($r.rc -eq 0 -and [string]::IsNullOrEmpty($r.stderr)) {
+        Pass $label
+    } else {
+        Fail $label ("rc=$($r.rc) stderr=$($r.stderr)")
+    }
+}
+
+function Assert-OkFile($label, $path) {
+    # Validate a file path directly; exit 0 (advisory stderr warnings tolerated).
+    $errFile = New-TemporaryFile
+    & python3 $Validator $path 2>$errFile.FullName | Out-Null
+    $rc = $LASTEXITCODE
+    Remove-Item -Force $errFile.FullName -ErrorAction SilentlyContinue
+    if ($rc -eq 0) { Pass $label } else { Fail $label "rc=$rc" }
+}
+
 # Stage 1: a well-formed minimal batch passes.
 $ok = @'
 {"goals": [{"title": "Test goal", "type": "goal", "tasks": [{"title": "T1", "type": "work"}]}]}
@@ -70,6 +113,63 @@ if ($r.rc -ne 0 -and ($r.stderr -match "dependency|dependencies|index|references
     Pass "bad_dependency_index detected"
 } else {
     Fail "bad_dependency_index not detected" $r.stderr
+}
+
+# Stage 7: (f) length_limit — title and security_considerations are bound to
+# varchar(255), measured in Unicode code points (not bytes). Length-test tasks
+# carry the five scored fields so the length pass — not the advisory pass — is
+# under test.
+$t256 = 'x' * 256
+Assert-FailsWith "(f) 256-char task title fails with its path" `
+    ('{"goals":[{"title":"G","type":"goal","tasks":[{"title":"' + $t256 + '","type":"work","dependencies":[],' + $Scored + '}]}]}') `
+    "goals[0].tasks[0].title is 256 characters"
+
+$t255 = 'x' * 255
+Assert-Silent "(f) boundary: exactly 255 characters passes silently" `
+    ('{"goals":[{"title":"G","type":"goal","tasks":[{"title":"' + $t255 + '","type":"work","dependencies":[],' + $Scored + '}]}]}')
+
+$g256 = 'g' * 256
+Assert-FailsWith "(f) 256-char goal title fails with its path" `
+    ('{"goals":[{"title":"' + $g256 + '","type":"goal","tasks":[{"title":"T","type":"work","dependencies":[],' + $Scored + '}]}]}') `
+    "goals[0].title is 256 characters"
+
+$sec271 = 'y' * 271
+Assert-FailsWith "(f) oversized security_considerations element names its path" `
+    ('{"goals":[{"title":"G","type":"goal","tasks":[{"title":"T","type":"work","dependencies":[],"acceptance_criteria":"It works","testing_strategy":{"unit_tests":["one"]},"security_considerations":["fine","' + $sec271 + '"],"pitfalls":["none"],"patterns_to_follow":"existing"}]}]}') `
+    "goals[0].tasks[0].security_considerations[1] is 271 characters"
+
+$cjk255 = '中' * 255
+Assert-Silent "(f) multibyte: 255 CJK code points (765 UTF-8 bytes) passes — code points, not bytes" `
+    ('{"goals":[{"title":"G","type":"goal","tasks":[{"title":"' + $cjk255 + '","type":"work","dependencies":[],' + $Scored + '}]}]}')
+
+$cjk256 = '中' * 256
+Assert-FailsWith "(f) multibyte: 256 CJK code points fails as 256 characters" `
+    ('{"goals":[{"title":"G","type":"goal","tasks":[{"title":"' + $cjk256 + '","type":"work","dependencies":[],' + $Scored + '}]}]}') `
+    "is 256 characters"
+
+# Stage 8: advisory scored-field completeness — warnings on stderr, exit 0.
+Assert-WarnsWith "advisory: missing scored-field key warns but validation passes" `
+    '{"goals":[{"title":"G","type":"goal","tasks":[{"title":"T","type":"work","dependencies":[],"acceptance_criteria":"It works","testing_strategy":{"unit_tests":["one"]},"pitfalls":["none"],"patterns_to_follow":"existing"}]}]}' `
+    "goals[0].tasks[0].security_considerations is empty or missing"
+
+Assert-WarnsWith "advisory: empty-array scored field warns the same as a missing key" `
+    '{"goals":[{"title":"G","type":"goal","tasks":[{"title":"T","type":"work","dependencies":[],"acceptance_criteria":"It works","testing_strategy":{"unit_tests":["one"]},"security_considerations":["ok"],"pitfalls":[],"patterns_to_follow":"existing"}]}]}' `
+    "goals[0].tasks[0].pitfalls is empty or missing"
+
+Assert-Silent "advisory: all five scored fields populated — validator is completely silent" `
+    ('{"goals":[{"title":"G","type":"goal","tasks":[{"title":"T","type":"work","dependencies":[],' + $Scored + '}]}]}')
+
+# Ordering pin: a fatal check must exit BEFORE any advisory warning prints.
+$r = Invoke-Validator '{"goals":[{"title":"G","type":"goal","tasks":[{"title":"T","type":"work","dependencies":[0]}]}]}'
+if ($r.rc -ne 0 -and ($r.stderr -notmatch 'warning:')) {
+    Pass "advisory: warnings never precede a fatal failure (no warning on fatal exit)"
+} else {
+    Fail "advisory: fatal must beat warning" ("rc=$($r.rc) stderr=$($r.stderr)")
+}
+
+# Stage 9: real repo fixtures are structurally valid and within length bounds.
+Get-ChildItem (Join-Path $PluginRoot 'fixtures') -Filter '*-stride-batch.json' | ForEach-Object {
+    Assert-OkFile "repo fixture valid + within length bounds: $($_.Name)" $_.FullName
 }
 
 Write-Host ''
