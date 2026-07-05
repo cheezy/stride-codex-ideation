@@ -70,6 +70,7 @@ The root key is **`"goals"` — never `"tasks"`**. Sending `{"tasks": [...]}` is
           "acceptance_criteria": "string — newline-separated criteria (NOT an array)",
           "patterns_to_follow": "string — newline-separated (NOT an array)",
           "pitfalls": ["string"],
+          "security_considerations": ["string"],
           "dependencies": [0],
           "key_files": [
             {"file_path": "lib/app/foo.ex", "note": "why touched", "position": 0}
@@ -172,7 +173,15 @@ Input (excerpt): a requirements doc for "add a dark mode toggle" — single seam
           "verification_steps": [
             {"step_type": "command", "step_text": "grep -E 'bg-white|text-gray-900|border-gray-200' lib/app_web/components/core_components.ex", "expected_result": "no matches", "position": 0},
             {"step_type": "manual", "step_text": "Spot-check 3 routes in light mode in the browser", "expected_result": "Visual rendering unchanged from baseline", "position": 1}
-          ]
+          ],
+          "testing_strategy": {
+            "unit_tests": ["Existing core_components render tests still pass after the token swap"],
+            "integration_tests": [],
+            "manual_tests": ["Compare 3 representative routes against the light-mode visual baseline"],
+            "edge_cases": ["Components with no explicit color inherit the semantic token rather than a hardcoded value"],
+            "coverage_target": ""
+          },
+          "security_considerations": ["Migration touches only static CSS class names — it introduces no user input and no new injection or escaping surface"]
         }
       ]
     }
@@ -218,7 +227,15 @@ Input (excerpt): a requirements doc for "notifications system" — three orthogo
           ],
           "verification_steps": [
             {"step_type": "command", "step_text": "mix test test/app/notifications/queue_test.exs", "expected_result": "All tests pass", "position": 0}
-          ]
+          ],
+          "testing_strategy": {
+            "unit_tests": ["Dedupe collapses duplicate (recipient_id, event_class) events to a single insert", "Worker persists one event per dedupe key"],
+            "integration_tests": ["notification_requested emitted from the approval lifecycle lands on the :notifications queue"],
+            "manual_tests": [],
+            "edge_cases": ["Two identical events enqueued in the same instant dedupe to one"],
+            "coverage_target": ""
+          },
+          "security_considerations": ["Notification payloads may carry recipient PII — never log raw payload contents", "Scope every queue read to recipient_id so one user can never receive another user's notifications"]
         }
       ]
     }
@@ -267,7 +284,15 @@ The decomposer would split at the layer seam and emit two goals in claim order. 
           ],
           "verification_steps": [
             {"step_type": "command", "step_text": "mix test test/app/notifications/notification_test.exs", "expected_result": "All tests pass", "position": 0}
-          ]
+          ],
+          "testing_strategy": {
+            "unit_tests": ["Changeset validates required fields (recipient_id, event_class)", "Changeset rejects a missing recipient_id"],
+            "integration_tests": [],
+            "manual_tests": [],
+            "edge_cases": ["read_at nil represents unread; a non-nil value represents read"],
+            "coverage_target": ""
+          },
+          "security_considerations": ["payload is a free-form map — validate its keys so untrusted event data cannot smuggle oversized or unexpected content into the store", "Keep recipient_id an enforced belongs_to association so notifications cannot be mis-addressed to another user"]
         }
         // ... 5 more tasks: migration, preferences schema, create_notification, list_for_user, mark_read context functions
       ]
@@ -302,7 +327,15 @@ The decomposer would split at the layer seam and emit two goals in claim order. 
           ],
           "verification_steps": [
             {"step_type": "command", "step_text": "mix test test/app_web/live/notifications/notifications_live_test.exs", "expected_result": "All tests pass", "position": 0}
-          ]
+          ],
+          "testing_strategy": {
+            "unit_tests": ["Mount loads only the current user's notifications", "handle_event(\"mark_read\", ...) marks the target notification read"],
+            "integration_tests": ["Mounting /notifications as an authenticated user renders that user's list"],
+            "manual_tests": [],
+            "edge_cases": ["A user with zero notifications renders an empty state rather than crashing"],
+            "coverage_target": ""
+          },
+          "security_considerations": ["Mount must load only the current user's notifications — never trust a recipient_id supplied in params", "mark_read must confirm the target notification belongs to the current user before updating it"]
         }
         // ... 7 more tasks: Presence wiring, unread badge, preferences form component, header indicator, mark-all-read action, route auth, telemetry
       ]
