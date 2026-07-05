@@ -73,6 +73,41 @@ if ($shaAfter -match '^[0-9a-f]{64}$') { Pass "on-disk batch JSON unchanged afte
 
 Remove-Item -Force $tmpBatch.FullName -ErrorAction SilentlyContinue
 
+# --- strip_audit_fields.py: created_by_agent on goals survives the strip ---
+# AC (W1535): created_by_agent is a per-goal create-payload field the Stride
+# API persists for attribution in the /agents feed. strip_audit_fields.py
+# removes only the three root-level local-audit fields; the per-goal
+# created_by_agent MUST survive to the API payload.
+
+$batchCba = @'
+{
+  "source_spec": "docs/foo.md",
+  "source_spec_sha256": "abc123",
+  "decomposition_notes": "note",
+  "goals": [{"title": "G", "type": "goal", "created_by_agent": "Codex CLI", "tasks": [{"title": "T", "type": "work"}]}]
+}
+'@
+$tmpBatchCba = New-TemporaryFile
+Set-Content -LiteralPath $tmpBatchCba.FullName -Value $batchCba -Encoding UTF8
+
+$strippedCba = & python3 $StripAudit $tmpBatchCba.FullName 2>&1
+if ($LASTEXITCODE -eq 0) {
+    $strippedCbaText = ($strippedCba -join "`n")
+    if ($strippedCbaText -match '"created_by_agent"') {
+        if ($strippedCbaText -notmatch '"source_spec"|"decomposition_notes"') {
+            Pass "strip: preserves per-goal created_by_agent while removing the three audit fields"
+        } else {
+            Fail "strip: created_by_agent survived but an audit field was not stripped" $strippedCbaText
+        }
+    } else {
+        Fail "strip: stripped created_by_agent (it must survive to the API payload)" $strippedCbaText
+    }
+} else {
+    Fail "strip_audit_fields.py exited non-zero on input with created_by_agent" ($strippedCba -join "`n")
+}
+
+Remove-Item -Force $tmpBatchCba.FullName -ErrorAction SilentlyContinue
+
 Write-Host ''
 Write-Host ("{0} passed, {1} failed" -f $script:PASS, $script:FAIL)
 if ($script:FAIL -gt 0) { exit 1 } else { exit 0 }
