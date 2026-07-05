@@ -4,6 +4,35 @@ All notable changes to the `stride-codex-ideation` plugin are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-04
+
+Review-queue hardening pass: the decomposer contract, stridify stamping, batch validator, and calibration fixtures are updated so goals and tasks shipped through this port are fully attributed and score complete against Stride's review queue, plus a sweep of stale documentation references left over from the Codex port.
+
+### Added
+
+- **`created_by_agent` stamping in the stridify pipeline (W1535)** — `skills/stride-ideation-stridify/SKILL.md` Step 8b now stamps `created_by_agent` on every goal object (not the root, not child tasks — the server propagates the goal's value to its nested tasks) before the batch is written and POSTed, so goals shipped through this port are attributed in the `/agents` activity feed instead of showing `?`. `lib/strip_audit_fields.py` deliberately preserves the field (it strips only the three root-level local-audit fields), and both `lib/test-ship-helpers.{sh,ps1}` gain a mirrored regression asserting it survives the strip.
+- **`varchar(255)` length check and advisory scored-field warnings in `lib/validate_batch.py` (W1537)** — a sixth fatal check `(f) length_limit` fails (exit 1, naming the JSON path) when a goal/task `title` or a `security_considerations` element exceeds 255 Unicode code points (matching Stride's changeset guard; `pitfalls` / `key_files` JSONB stay unbounded), and an advisory pass warns on **stderr** (exit stays `0`) for any task missing or empty one of the five review-queue scored fields. The five original structural checks are unchanged and still fire in order. `lib/test-validate-batch.{sh,ps1}` gain length + advisory cases (bash 29 / pwsh 19 passing), and the stridify Step 8a check table + validator docstring document the new checks.
+
+### Changed
+
+- **Decomposer contract exemplifies all five scored fields (W1533)** — `agents/requirements-decomposer.md`'s canonical task skeleton now lists `security_considerations`, and one fully-populated task in each of the three worked examples carries both `testing_strategy` and `security_considerations`, so an implementer copying an example emits tasks the review queue scores as complete. The field-format table and "What you MUST NOT emit" allow-list stay consistent (`security_considerations` remains a valid scored field, not a stripped one).
+- **Calibration fixtures backfilled (W1534)** — every task across the three `fixtures/*-stride-batch.json` batches (dark-mode 5, notifications 16, replace-test-suite 14) now carries a scope-matched `testing_strategy` object and `security_considerations` array (each element under 255 chars); `fixtures/README.md` notes the fixtures now exercise the two previously-omitted scored fields. `source_spec_sha256` values and dependency ordering are unchanged.
+
+### Fixed
+
+- **Requirements-reviewer profile-aware check-count contradiction (W1536)** — `agents/requirements-reviewer.md` said both "five conditional checks" and "All three checks are advisory"; corrected the stale "three" to "five" so the count is consistent with the five profile-aware bullets (Concrete Example, JTBD-Problem, Why-now, MVP/Validation, Falsifiable).
+- **Stale `fixtures/SMOKE-TEST-NOTE.md` (W1538)** — corrected the result count from `10 passed` to `14 passed, 0 failed` (verified against `lib/run_smoke_test.sh`), added the Stage 6 challenge-gate row to the verified-stages table, renumbered the live-POST stage to Stage 7, and replaced the two `Copilot CLI` references with `Codex CLI`.
+- **Removed-slash-command references in helper docstrings and test-script comments (W1539)** — rewrote stale `/stride-ideation:decompose`, `/stride-ideation:ship`, and `commands/` references in `lib/test-stamping.sh`, `lib/test-ship-helpers.sh`, `lib/strip_audit_fields.py`, and `lib/filename.sh` to name the current `stride-ideation-ideate` / `stride-ideation-stridify` skill surfaces; the `.ps1` twins already carried the correct wording. Comments/docstrings only — no assertion or helper logic changed.
+- **Orphaned drift check + smoke-test self-description (W1540)** — `lib/drift_check.py`'s docstring now documents it as a standalone fixture-regression / audit helper (its only callers are `run_smoke_test.sh` Stage 2 and `test-drift-check.sh`) and states the `stride-ideation-stridify` skill deliberately omits drift checking (it writes and POSTs the batch in the same invocation, so the source cannot drift); `lib/run_smoke_test.{sh,ps1}` no longer describe a removed `/stride-ideation:ship pipeline`.
+
+### Release
+
+No marketplace pin — `stride-codex-ideation` is **not** published on any marketplace (unlike `stride-ideation` on the Claude Code marketplace or `stride-copilot-ideation` on the Copilot marketplace), so this release is a git tag + GitHub release on the `stride-codex-ideation` repo only. No `marketplace.json` or marketplace README is touched.
+
+### Source
+
+W1533 (decomposer skeleton + examples), W1534 (fixture backfill), W1535 (`created_by_agent` stamping), W1536 (reviewer check-count fix), W1537 (validator length + scored-field checks), W1538 (SMOKE-TEST-NOTE refresh), W1539 (slash-command reference corrections), W1540 (drift-check + smoke-test self-description), W1541 (this release).
+
 ## [0.2.0] - 2026-06-26
 
 ### Added
