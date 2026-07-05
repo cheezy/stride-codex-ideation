@@ -11,6 +11,8 @@ The fixtures are **not** training data. The decomposer prompt should produce the
 
 ## The three pairs
 
+Every task in all three batch pairs now carries a `testing_strategy` object and a `security_considerations` array — the two review-queue **scored fields** that the fixtures previously omitted — with values matched to that task's own scope. Together with the `acceptance_criteria` every task already carries (and the `patterns_to_follow` / `pitfalls` the `dark-mode-toggle` tasks carry), the fixtures now exercise the full set of review-queue scored fields rather than modelling partial coverage.
+
 ### 1. Small / single-goal — `dark-mode-toggle`
 
 - **Requirements:** `2026-05-12T120000-dark-mode-toggle-requirements.md`
