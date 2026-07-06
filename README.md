@@ -108,7 +108,7 @@ Activate the skill in chat with an inline topic or with the topic via the platfo
 > Activate stride-ideation-ideate with "Add notifications system"
 ```
 
-The skill drives a round-based question loop (≤ 4 questions per round) and gates the seven required sections before writing. The terminal state is a committed `docs/ideation/<timestamp>-<slug>-requirements.md` file. Profiles are selected via `--profile lean|product|discovery|lean-startup`; the default `lean` matches upstream v0.3.0 behavior.
+The skill drives a round-based question loop (≤ 4 questions per round) and gates the seven required sections before writing. The terminal state is a committed `docs/ideation/<timestamp>-<slug>-requirements.md` file. Profiles are selected via `--profile lean|product|discovery|lean-startup`; the default `lean` runs the shared core only — the seven gated sections plus the mandatory framing checkpoint, premortem, and challenge gate — with no profile-specific forcing questions or optional document sections.
 
 ```
 > Activate stride-ideation-ideate with "--profile=product Review queue UX"
