@@ -142,42 +142,34 @@ Before doing any expensive work, the skill must confirm the input is a real, par
 
 4. **Advisory: large-decomposition warning (no exit, never blocks).** If the doc contains a `## Decomposition seams` section AND `GOAL_ARG` is unset (the user did NOT invoke with `--goal`), count surface enumerations under that heading. If the count is **greater than 3**, print a single advisory line to stderr and continue execution — this is a UX hint, not a gate. When `--goal` IS set (per-goal mode), do NOT print this advisory — the user has already partitioned and emitting noise on top is counter-productive. When the seams section is absent or enumerates ≤3 surfaces, also skip the advisory.
 
-   **Surface-count heuristic.** Inside the `## Decomposition seams` section body (from the heading exclusive to the next `^## ` heading or EOF), count lines that match any of these three shapes — surface enumerators are intentionally permissive because the section is freeform:
+   **Surface count = the seams `--goal` can address.** The count is the number of seams `sti_extract_seams` (in `lib/filename.sh`) emits — the same parser Step 2b resolves `--goal` against and Step 7e scopes with, so a doc whose advisory fires can always be addressed with `--goal 1` … `--goal <count>`. One item shape per section, by precedence:
 
-   | Shape | Pattern |
-   |---|---|
-   | Level-3 heading | `^### ` |
-   | Numbered list item | `^[[:space:]]*[0-9]+\.[[:space:]]+` |
-   | Bulleted list item | `^[[:space:]]*[-*][[:space:]]+` |
+   | Precedence | Seam shape | Pattern |
+   |---|---|---|
+   | 1 | Top-level numbered bold item | `^ {0,3}<N>. **Name**` — at most 3 leading spaces, as markdown defines a list item; an indented one is nested (not a seam) when a bulleted bold item comes before it or it is indented deeper than the first numbered seam |
+   | 2 | Top-level bulleted bold item (only if no numbered items) | `^[-*] **Name**` |
+   | 3 | Level-3 heading (only if neither of the above) | `^### Name` |
 
-   Count each shape independently, then take the **MAX** across the three. The max-of-shapes rule is friendlier than sum-of-shapes when a section mixes a primary numbered list of surfaces with a secondary bulleted list of cross-cutting notes (e.g., "Shared contract" bullets, "Sequencing & dependencies" bullets) — those secondary bullets should not inflate the surface count.
+   So a numbered list's secondary cross-cutting bullets ("Shared contract" notes, say) never inflate the count, and a numbered sub-list nested under a seam — at 2 or 3 spaces, as formatters indent it, or deeper — never adds seams or takes the section over. An item whose name does not slugify cannot be addressed, so it is not counted.
 
    ```bash
    (
-   # Carried forward: REQUIREMENTS_PATH, GOAL_ARG (empty unless --goal)
+   # Carried forward: HELPER_ROOT, REQUIREMENTS_PATH, GOAL_ARG (empty unless --goal)
+   HELPER_ROOT='<value of HELPER_ROOT>'
    REQUIREMENTS_PATH='<value of REQUIREMENTS_PATH>'
    GOAL_ARG='<value of GOAL_ARG, or empty>'
+   [ -f "$HELPER_ROOT/lib/filename.sh" ] || { echo "stride-ideation: cannot find the plugin helpers at $HELPER_ROOT; resolve the helper root again (see Resolving the helper root)." >&2; exit 1; }
+   . "$HELPER_ROOT/lib/filename.sh"
    if [ -z "${GOAL_ARG:-}" ] && grep -qE '^## Decomposition seams[[:space:]]*$' "$REQUIREMENTS_PATH"; then
-     SEAM_COUNT="$(awk '
-       /^## Decomposition seams[[:space:]]*$/ { in_section=1; next }
-       in_section && /^## / { in_section=0 }
-       in_section && /^### / { h3++ }
-       in_section && /^[[:space:]]*[0-9]+\.[[:space:]]+/ { num++ }
-       in_section && /^[[:space:]]*[-*][[:space:]]+/ { bul++ }
-       END {
-         h3 = h3 + 0; num = num + 0; bul = bul + 0
-         m = h3
-         if (num > m) m = num
-         if (bul > m) m = bul
-         print m
-       }
-     ' "$REQUIREMENTS_PATH")"
+     SEAM_COUNT="$(sti_extract_seams "$REQUIREMENTS_PATH" | grep -c '')"
      if [ "$SEAM_COUNT" -gt 3 ]; then
        echo "stride-ideation: requirements doc enumerates $SEAM_COUNT surfaces under Decomposition seams. Consider activating stride-ideation-stridify with --goal <name|index> $SEAM_COUNT times to reduce agent-dispatch failure risk on large decompositions. Continuing with all-goals mode." >&2
      fi
    fi
    )
    ```
+
+   PowerShell: dot-source `<HELPER_ROOT>/lib/filename.ps1` and count `@(Sti-ExtractSeams -Path '<value of REQUIREMENTS_PATH>').Count`.
 
    The advisory **never** exits non-zero — it is informational. Users who genuinely want all-goals mode on a 7-surface doc see the line once at the top of the run and ignore it; that is a deliberate trade-off, not a defect.
 
@@ -240,7 +232,9 @@ On success the block prints `goal_index=`, `goal_name=` and `goal_slug=` lines; 
 **Pitfalls honored here:**
 - `--goal` is **not** silently ignored on no-match — every miss raises a non-zero exit with the verbatim "did not match" message and a printed list of the actual seams that ARE present.
 - The seams section is **not** required in all docs — `GOAL_ARG` being unset means this step is a no-op. Only when the user explicitly opted into per-goal mode does the absence become an error.
-- The parser does not couple to any markdown shape beyond "level-2 heading `## Decomposition seams` followed by a numbered list of `<N>. **Name** ...` items." Intro prose, trailing prose, and item bodies on subsequent lines are all tolerated — only the bold-named first line of each numbered item is used.
+- The parser does not couple to any markdown shape beyond "level-2 heading `## Decomposition seams` (matched case-sensitively) followed by one kind of item": top-level numbered `<N>. **Name** ...` items (at most 3 leading spaces), else top-level bulleted `- **Name** ...` items, else `### Name` headings — the same precedence the Step 2 advisory counts by. Intro prose, trailing prose, and item bodies on subsequent lines are all tolerated — only the first line of each item is used, and a nested numbered sub-list (any indent under a bulleted seam, or deeper than the numbered seams) is part of the item above it. The PowerShell twins match case-sensitively too.
+- Step 7e's scoping indexes exactly the items the resolver emits, so `--goal <n>` always sends the surface it named to the decomposer — even when an earlier item's name does not slugify.
+- A purely numeric `--goal` is compared as a number, so `--goal 01` and `--goal 1` select the same seam, in bash and PowerShell alike.
 
 ### Step 3: Preflight auth from `.stride_auth.md`
 
@@ -455,7 +449,7 @@ done
 
 When `GOAL_SLUG` is set, build a scoped prompt in two layers:
 
-1. **Doc surgery.** Use `sti_scope_doc_to_seam` from `lib/filename.sh` to produce a copy of the doc with its `## Decomposition seams` section pruned to keep only the matched seam item. Everything OUTSIDE the seams section (the seven gated sections — Problem, Goal, Outcome, Assumptions, Constraints, Non-goals, Success metrics — plus any Sketch or Open questions content) is preserved verbatim, so the agent retains the full shared context. Inside the section, intro and trailing prose are dropped and replaced with a one-line notice — only the matched numbered item's lines (start line + any continuation lines until the next item or the section's end) remain.
+1. **Doc surgery.** Use `sti_scope_doc_to_seam` from `lib/filename.sh` to produce a copy of the doc with its `## Decomposition seams` section pruned to keep only the matched seam item. Everything OUTSIDE the seams section (the seven gated sections — Problem, Goal, Outcome, Assumptions, Constraints, Non-goals, Success metrics — plus any Sketch or Open questions content) is preserved verbatim, so the agent retains the full shared context. Inside the section, intro prose and the other items are dropped and replaced with a one-line notice — only the matched item's lines (start line + any continuation lines until the next item or the section's end) remain, so prose that trails the last item stays with the last item and is dropped for every other one. `sti_scope_doc_to_seam` indexes exactly the items `sti_extract_seams` emits — the same shape precedence and the same skip rule for a name that slugifies to empty — so `GOAL_INDEX` always selects the seam Step 2b resolved, whichever shape the section uses.
 
    ```bash
    (
