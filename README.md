@@ -20,6 +20,8 @@ stride-ideation-stridify --batch <path-to-stride-batch.json> [--yes]
   dispatches the decomposer agent, stamps audit metadata, writes and
   commits a sibling Stride batch JSON, then POSTs it to /api/tasks/batch
   on your Stride instance and renders the created G/W identifiers.
+  Before anything is sent it previews the goals and tasks and asks for
+  your approval; --yes (alias --auto-approve) skips that question.
   --batch ships a batch JSON already on disk without decomposing again.
   --goal scopes the dispatch to one surface from the doc's
   ## Decomposition seams section (see the upstream "Resilience model" below).
@@ -29,7 +31,7 @@ The first skill is hard-gated on seven required sections (Goal, Problem, Outcome
 
 ## Installation
 
-Codex CLI discovers skills in `.agents/skills/` (or `.codex/skills/`) and agents in `.agents/agents/` automatically. Drop the skills and agents from this repo into either location.
+Codex CLI discovers skills in `.agents/skills/` (or `.codex/skills/`). The agents are not discovered by Codex: the skills read the agent files from this plugin's helper root (see **Where the files go**) and run each one as a Codex sub-agent, or inline as a read-only pass when sub-agents are unavailable. Use the installer below; it puts every file where the skills look for it.
 
 ### One-liner (recommended)
 
@@ -84,14 +86,14 @@ confined to a clearly delimited **managed block** (`<!-- BEGIN stride-ideation -
 - **A symlinked `AGENTS.md` is refused**, never written through, so a project
   cannot redirect the installer into another file.
 
-`install.sh` and `install.ps1` behave identically and write byte-identical `AGENTS.md` files for the same input (`lib/test-install.sh` and `lib/test-install.ps1` check this offline).
+`install.sh` and `install.ps1` install the same layout and write byte-identical `AGENTS.md` files for the same input (`lib/test-install.sh` and `lib/test-install.ps1` check this offline). They differ where the platforms do: the flags are `--project` / `--help` for `install.sh` and `-Project` / `-Help` for `install.ps1`; `install.ps1` resolves the home directory from `USERPROFILE`, then `HOME`; and its link checks also refuse Windows junctions and other reparse points.
 
 ### Where the files go
 
 ```
 <install-dir>/                    ~/.agents/ (global) or ./.agents/ (--project)
 ├── skills/<skill>/SKILL.md       where Codex discovers skills
-├── agents/<agent>.md             where Codex discovers agents
+├── agents/<agent>.md             a copy of the agents (the skills use the helper root's)
 └── stride-codex-ideation/        this plugin's helper root
     ├── lib/                      helper scripts the skills run
     ├── agents/                   the agent files the skills dispatch
@@ -107,18 +109,18 @@ The helper root is this plugin's own directory, so no other tool installing into
 ```bash
 git clone https://github.com/cheezy/stride-codex-ideation.git
 
-# Copy skills and agents into the location Codex auto-discovers
-mkdir -p .agents/skills .agents/agents .agents/stride-codex-ideation
-cp -r stride-codex-ideation/skills/. .agents/skills/
-cp -r stride-codex-ideation/agents/. .agents/agents/
-cp stride-codex-ideation/AGENTS.md AGENTS.md
+# Skills go where Codex discovers them.
+mkdir -p .agents/skills .agents/stride-codex-ideation
+cp -R stride-codex-ideation/skills/. .agents/skills/
 
-# The helpers, fixtures and a copy of the agents go in the plugin's own
-# helper root, where the skills look them up.
+# The helpers, fixtures and agents go in the plugin's own helper root,
+# where the skills look them up.
 cp -R stride-codex-ideation/lib stride-codex-ideation/fixtures stride-codex-ideation/agents .agents/stride-codex-ideation/
 ```
 
-On Windows, use `Copy-Item -Recurse` for the equivalent.
+Do not copy this repository's `AGENTS.md` over your own. Paste its contents into your project's `AGENTS.md` between a `<!-- BEGIN stride-ideation -->` line and a `<!-- END stride-ideation -->` line (create the file if you have none), which is the managed block the installer would write. To get the installer's exact behavior from a local checkout instead — managed block, helper-root refresh and link checks included — run `INSTALL_SOURCE_DIR=./stride-codex-ideation bash stride-codex-ideation/install.sh --project` from the project root.
+
+On Windows, use `Copy-Item -Recurse` for the equivalent copies, or run `install.ps1 -Project` with `INSTALL_SOURCE_DIR` set.
 
 ### Auth file
 
@@ -135,17 +137,20 @@ Add `.stride_auth.md` to your project's `.gitignore` — it contains a secret. T
 
 ### `stride-ideation-ideate` — drive a session, produce a requirements doc
 
-Activate the skill in chat with an inline topic or with the topic via the platform's question UI:
+Activate the skill in chat with an inline topic, or without one and answer the topic question it asks:
 
 ```
 > Activate stride-ideation-ideate with "Add notifications system"
 ```
 
-The skill drives a round-based question loop (≤ 4 questions per round) and gates the seven required sections before writing. The terminal state is a committed `docs/ideation/<timestamp>-<slug>-requirements.md` file. Profiles are selected via `--profile lean|product|discovery|lean-startup`; the default `lean` runs the shared core only — the seven gated sections plus the mandatory framing checkpoint, premortem, and challenge gate — with no profile-specific forcing questions or optional document sections.
+The skill drives a round-based question loop (≤ 4 questions per round) and gates the seven required sections before writing. The terminal state is a committed `docs/ideation/<timestamp>-<slug>-requirements.md` file. Profiles are selected via `--profile lean|product|discovery|lean-startup`; the default `lean` runs the shared core only — the seven gated sections, the round recap, the uncertainty path, the mandatory framing checkpoint, premortem and challenge gate, the reviewer pass and draft autosave — with no profile-specific forcing questions or optional document sections. Without `--profile` the skill first recommends one. `--input <path>` seeds the draft from a freeform notes file (read only, never committed), and `--continue <path>` refines a prior requirements doc into a new sibling file.
+
+Every question the skills ask — the round questions, the recommendation, the slug confirmation, the draft-resume choice, the challenge gate and the reviewer decision — is plain text in one chat turn with numbered options: answer with a number, or with several numbers for a multi-select question.
 
 ```
 > Activate stride-ideation-ideate with "--profile=product Review queue UX"
 > Activate stride-ideation-ideate with "--continue docs/ideation/2026-05-12T120000-foo-requirements.md"
+> Activate stride-ideation-ideate with "--input notes/slack-thread.md Digest emails"
 ```
 
 #### Session experience
@@ -153,9 +158,9 @@ The skill drives a round-based question loop (≤ 4 questions per round) and gat
 The `stride-ideation-ideate` session is guided, recoverable, and human-in-control. Before every round a display-only recap shows each of the seven gated sections as `solid` / `thin` / `empty`; every gated-section question carries an "I'm not sure — propose candidates" option; and the in-progress draft is autosaved to a gitignored scratch file under `.stride/` so an interruption is recoverable. Two mandatory, profile-independent checkpoints stress-test the design before the doc is written:
 
 - **Round-4 premortem** — inverts the framing to surface the *single* most likely failure mode, folded back into Assumptions as the riskiest entry.
-- **Challenge gate** — runs after the premortem (and the Round-5 MVP-design batch under `lean-startup`) and **before** the reviewer pass. It stress-tests the design via four components: an assumption-confidence audit (rate every assumption `high` / `medium` / `low`), a blind-spot scan, two distinct alternative approaches, and a cost / risk / complexity / timeline trade-off comparison. The gate is surfaced as a single multi-select decision through Codex CLI's question UI with an explicit **"Challenge nothing — write as-is"** choice. It is **advisory and never blocks the write**, and runs identically under every profile. Confidence ratings fold into the Assumptions entries in place; the blind spots, the two alternatives, and the trade-off comparison fold into a new optional **Design challenge** section (not one of the seven gated sections).
+- **Challenge gate** — runs after the premortem (and the Round-5 MVP-design batch under `lean-startup`) and **before** the reviewer pass. It stress-tests the design via four components: an assumption-confidence audit (rate every assumption `high` / `medium` / `low`), a blind-spot scan, two distinct alternative approaches, and a cost / risk / complexity / timeline trade-off comparison. The gate is surfaced as a single numbered multi-select question with an explicit **"Challenge nothing — write as-is"** choice. It is **advisory and never blocks the write**, and runs identically under every profile. Confidence ratings fold into the Assumptions entries in place; the blind spots, the two alternatives, and the trade-off comparison fold into a new optional **Design challenge** section (not one of the seven gated sections).
 
-After the gate, the advisory `requirements-reviewer` pass surfaces any findings as a multi-select decision (with an "Address none — write as-is" choice) that feeds at most one refinement round; like the gate, it never blocks the write.
+After the gate, the advisory `requirements-reviewer` pass surfaces any findings as a numbered multi-select question (with an "Address none — write as-is" choice) that feeds at most one refinement round; like the gate, it never blocks the write.
 
 ### `stride-ideation-stridify` — decompose + POST to Stride
 
@@ -165,7 +170,7 @@ After ideating (or against any compatible requirements doc), activate the second
 > Activate stride-ideation-stridify with docs/ideation/2026-05-12T120000-foo-requirements.md
 ```
 
-The skill validates the seven required sections, preflights auth from `.stride_auth.md`, dispatches the `requirements-decomposer` agent (with a bounded 3-attempt retry on transient failures), stamps `source_spec` + `source_spec_sha256` at the JSON root, writes a sibling `*-stride-batch.json` to disk, commits it, then POSTs to `/api/tasks/batch` and renders the created G/W identifier table.
+The skill validates the seven required sections, preflights auth from `.stride_auth.md`, dispatches the `requirements-decomposer` agent (with a bounded 3-attempt retry on transient failures), stamps `source_spec` + `source_spec_sha256` at the JSON root, writes a sibling `*-stride-batch.json` to disk, commits it, previews the goals and tasks and asks for your approval (skip the question with `--yes`, alias `--auto-approve`), then POSTs to `/api/tasks/batch` and renders the created G/W identifier table. Declining leaves the committed batch on disk to ship later with `--batch`.
 
 When the requirements doc has many surfaces (`## Decomposition seams` with > 3 items), partition with `--goal`:
 
@@ -204,20 +209,21 @@ Then: activate `stride-ideation-ideate` to scope the work, activate `stride-idea
 
 ## How this plugin relates to upstream `stride-ideation`
 
-This plugin is a faithful port of [`cheezy/stride-ideation`](https://github.com/cheezy/stride-ideation) to Codex CLI. The protocol — round-based question batching, hard-gated sections, advisory reviewer pass, decomposer dispatch with bounded retry, retry-exhaustion fallback, source_spec stamping, validator-before-commit, never-retry-POST — is preserved verbatim. The differences are mechanical adaptations:
+This plugin is a port of [`cheezy/stride-ideation`](https://github.com/cheezy/stride-ideation) to Codex CLI. The protocol — round-based question batching, hard-gated sections, advisory reviewer pass, decomposer dispatch with bounded retry, retry-exhaustion fallback, source_spec stamping, validator-before-commit, never-retry-POST — is the same; the wording and the helpers are adapted to Codex CLI. The main differences:
 
 | Upstream (Claude Code) | This plugin (Codex CLI) |
 |---|---|
 | Two slash commands (`/stride-ideation:ideate`, `/stride-ideation:stridify`) | Two named skills (`stride-ideation-ideate`, `stride-ideation-stridify`) — Codex CLI has no slash-command mechanism |
 | `commands/*.md` directory | `skills/<name>/SKILL.md` directories |
 | `agents/*.md` agent files | `agents/*.md` agent files (same bare-`.md` convention) |
-| `AskUserQuestion` tool name | "interactive question batch" — a single chat turn asking the user up to four related questions |
+| `AskUserQuestion` tool | Plain chat: each question has numbered options, answered by number (several numbers for a multi-select question); a round asks up to four related questions in one chat turn |
+| Agents dispatched by the `Agent` tool | The skills read `agents/*.md` from the plugin's helper root and run each as a Codex sub-agent, or inline as a read-only pass when sub-agents are unavailable |
 | `Bash`, `Read`, `Write`, `Skill`, `Agent` tool names | Codex equivalents (`shell`, `read`, `write`, plus the skill-activation contract documented in `AGENTS.md`) |
 | `lib/filename.sh` only | `lib/filename.sh` + `lib/filename.ps1` mirror for Windows users |
 | `lib/test-*.sh` only | `lib/test-*.sh` + `lib/test-*.ps1` mirrors for Windows users: every bash case has a PowerShell counterpart of the same strength, except the inherently bash-only ones listed below, so PASS counts can differ: a twin may keep extra PowerShell-only cases, and it is short only by those bash-only cases. The inherently bash-only cases are `eval` of `read_auth.py` output, the executable-bit check, the terminal-stdin draft case, and running a skill's bash block, which the PowerShell twin replays as git commands. `lib/test-skill-blocks.sh` has no twin |
 | `lib/ship.sh` (bash) | `lib/ship.py` — one Python script both bash and PowerShell hosts call |
 
-The fixtures, the decomposer agent prompt and the reviewer agent rubric are byte-identical to upstream. The `lib/` Python helpers are ported from upstream with the same behavior; their docstrings name this port's skills and scripts.
+The four calibration requirements docs in `fixtures/` are copied from upstream. The batch fixtures, the two agent prompts and the `lib/` helpers have diverged — Codex tool and skill names, the helper-root lookup, `lib/ship.py`, the scored-field backfill — so expect the same protocol, not identical bytes.
 
 ## Re-running the interactive end-to-end test
 

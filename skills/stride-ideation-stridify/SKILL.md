@@ -18,7 +18,7 @@ Activate this skill when the user:
 - Just finished the stride-ideation-ideate skill and wants the next step
 - Wants to ship a batch JSON that is already on disk (declined at the approval gate, stopped by a failed POST, or saved from a Step 7.5 recovery) — `--batch <path-to-stride-batch.json>`, see Step 1b
 
-If the user activates the skill with the requirements-doc path embedded in the message (e.g., "stridify docs/ideation/2026-05-12T120000-foo-requirements.md", with a `--goal <name|index>` flag, or with `--batch <path>`), parse those per Step 1. Otherwise prompt for the path via the platform's question UI.
+If the user activates the skill with the requirements-doc path embedded in the message (e.g., "stridify docs/ideation/2026-05-12T120000-foo-requirements.md", with a `--goal <name|index>` flag, or with `--batch <path>`), parse those per Step 1. Otherwise ask for the path in chat (see **How questions are asked** in `skills/stride-ideation/SKILL.md`).
 
 **Python on Windows.** Every helper this skill runs is a Python script (`lib/*.py`), so the same call works from bash and from PowerShell. Where a block says `python3`, a Windows host whose interpreter is named `python` or `py -3` uses that name instead — the arguments are identical.
 
@@ -82,7 +82,7 @@ Follow these steps in order. Do NOT skip steps.
 
 ### Step 1: Parse arguments
 
-The user may pass arguments inline in the activation request (e.g., "stridify docs/ideation/<file>-requirements.md" or "stridify <path> --goal kanban-app" or "stridify <path> --goal=2"). If no arguments are present, prompt the user for the path via the platform's question UI.
+The user may pass arguments inline in the activation request (e.g., "stridify docs/ideation/<file>-requirements.md" or "stridify <path> --goal kanban-app" or "stridify <path> --goal=2"). If no arguments are present, ask the user for the path in chat (see **How questions are asked** in `skills/stride-ideation/SKILL.md`).
 
 Parse arguments in this fixed order — `--batch` first, then `--goal`, then `--yes` / `--auto-approve`, then the trimmed remainder is `REQUIREMENTS_PATH`:
 
@@ -735,7 +735,7 @@ It prints `Goals and tasks to be created:`, then one `Goal: <title>  (<n> tasks)
 
 **(8.5b) Bypass when `--yes` / `--auto-approve` was set.** If `AUTO_APPROVE` is `true`, the human opted out of the gate explicitly: skip the prompt entirely and proceed to Step 9. Do NOT prompt, do NOT block — scripted and non-interactive callers depend on this path staying byte-for-byte identical to the historical fire-and-forget flow. (The tree render in 8.5a is still printed so the log carries a record of what was shipped, but no interaction is required.)
 
-**(8.5c) Otherwise, require explicit approval.** When `AUTO_APPROVE` is unset, ask the human via Codex CLI's question UI (the same prompt mechanism the stride-ideation-ideate skill uses — NOT Claude Code's `AskUserQuestion`) whether to create these goals and tasks in Stride. Proceed to Step 9 **only** on an explicit approval.
+**(8.5c) Otherwise, require explicit approval.** When `AUTO_APPROVE` is unset, ask the human a numbered-option question (see **How questions are asked** in `skills/stride-ideation/SKILL.md`) whether to create these goals and tasks in Stride. Proceed to Step 9 **only** on an explicit approval.
 
 On **decline**, stop cleanly:
 
