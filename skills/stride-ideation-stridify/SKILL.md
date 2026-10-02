@@ -134,11 +134,24 @@ Before doing any expensive work, the skill must confirm the input is a real, par
 
 2. **Filename family matches.** The path SHOULD end in `-requirements.md`. If it does not, warn but proceed — the slug-extraction step below may still succeed for paths produced by older versions of the plugin, and the section-validation pass below is the authoritative check anyway.
 
-3. **All seven hard-gated sections are present.** Use grep to verify that the file contains a level-2 heading for each of: `Problem`, `Goal`, `Outcome`, `Assumptions`, `Constraints`, `Non-goals`, `Success metrics`. Order is not enforced (the doc template orders Problem before Goal, but a hand-edited doc may differ). If any heading is missing, print:
+3. **All seven hard-gated sections are present.** `lib/check_sections.py` checks that the file has a level-2 heading for each of: `Problem`, `Goal`, `Outcome`, `Assumptions`, `Constraints`, `Non-goals`, `Success metrics`. Headings match case-insensitively with trailing whitespace ignored (so the protocol skill's `Success Metrics` and the template's `Success metrics` both pass), headings inside code fences do not count, and order is not enforced (the doc template orders Problem before Goal, but a hand-edited doc may differ). The script only reads the doc:
 
-   > *"stride-ideation: requirements doc is missing required section(s): `<list>`. Either re-activate the stride-ideation-ideate skill with `--continue <path>` to fill them in, or hand-edit the doc to include the missing sections."*
+   ```bash
+   (
+   # Carried forward: HELPER_ROOT, REQUIREMENTS_PATH
+   HELPER_ROOT='<value of HELPER_ROOT>'
+   REQUIREMENTS_PATH='<value of REQUIREMENTS_PATH>'
+   [ -f "$HELPER_ROOT/lib/filename.sh" ] || { echo "stride-ideation: cannot find the plugin helpers at $HELPER_ROOT; resolve the helper root again (see Resolving the helper root)." >&2; exit 1; }
+   python3 "$HELPER_ROOT/lib/check_sections.py" "$REQUIREMENTS_PATH" || {
+     echo "stride-ideation: either re-activate the stride-ideation-ideate skill with --continue <path> to fill them in, or hand-edit the doc to include the missing sections." >&2
+     exit 1
+   }
+   )
+   ```
 
-   And stop. Do NOT proceed with a partial doc — the decomposer agent's output quality depends on every section being substantive.
+   PowerShell: `python3 '<value of HELPER_ROOT>/lib/check_sections.py' '<value of REQUIREMENTS_PATH>'` — the same script, so the gate is identical on both hosts; stop on a non-zero `$LASTEXITCODE`.
+
+   On a missing section it prints *"stride-ideation: requirements doc is missing required section(s): `<list>`"* plus the remedy line, and exits non-zero. Stop there. Do NOT proceed with a partial doc — the decomposer agent's output quality depends on every section being substantive.
 
 4. **Advisory: large-decomposition warning (no exit, never blocks).** If the doc contains a `## Decomposition seams` section AND `GOAL_ARG` is unset (the user did NOT invoke with `--goal`), count surface enumerations under that heading. If the count is **greater than 3**, print a single advisory line to stderr and continue execution — this is a UX hint, not a gate. When `--goal` IS set (per-goal mode), do NOT print this advisory — the user has already partitioned and emitting noise on top is counter-productive. When the seams section is absent or enumerates ≤3 surfaces, also skip the advisory.
 
@@ -603,15 +616,15 @@ The validator enforces six named **fatal** checks, in order:
 | Check | Failure mode | Example error message |
 |---|---|---|
 | (a) `parse_error` | Input is not valid JSON | `JSON parse failed at line 3 col 7 (char 24): Expecting property name enclosed in double quotes` |
-| (b) `wrong_root_key` | Root has `tasks` or any key other than `goals` | `root key 'tasks' is the most common batch-API mistake — Stride's POST /api/tasks/batch requires root key 'goals'` |
+| (b) `wrong_root_key` | Root has `tasks` (instead of, or alongside, `goals`), or has no `goals` key (any unexpected root key is named in the message; other keys beside `goals`, such as the local audit fields, are allowed) | `root key 'tasks' is the most common batch-API mistake — Stride's POST /api/tasks/batch requires root key 'goals'` |
 | (c) `empty_goals` | `goals` missing, not an array, or empty | `root.goals is an empty array — the decomposer returned no goals` |
-| (d) `goal_missing_field` | A goal lacks `title`, `type`, or `tasks`, or a task is malformed | `goals[0] is missing required field 'title'` |
+| (d) `goal_missing_field` | A goal is not an object, lacks a non-empty string `title`, has a `type` other than `goal`, or has `tasks` that is not a non-empty array; or a task is not an object with a non-empty string `title` and a `type` of `work` or `defect` | `goals[0].tasks[1] is missing required field 'type'` |
 | (e) `bad_dependency_index` | A task's `dependencies[]` index is out of range, negative, or a forward / self reference | `goals[0].tasks[1].dependencies references index 5 but goal only has 2 tasks (valid indices 0..1)` |
 | (f) `length_limit` | A goal/task `title` or a `security_considerations` element exceeds 255 Unicode code points (the server binds these to `varchar(255)`) | `goals[0].tasks[0].title is 256 characters — the server column is varchar(255) and rejects longer values` |
 
 After all six fatal checks pass, the validator runs an **advisory scored-field completeness pass**: it prints a `stride-ideation: warning:` line to **stderr** (exit code stays `0`) for any task whose review-queue scored field (`acceptance_criteria`, `testing_strategy`, `security_considerations`, `pitfalls`, `patterns_to_follow`) is missing or empty — each renders an empty review-queue pill once shipped. These warnings are informational and never block the ship; the batch is still valid.
 
-A **fatal** validation failure here is an **agent regression** — the requirements-decomposer agent's contract guarantees a valid root-key=`goals` JSON within the length bounds. If you see one, the agent's prompt has drifted; surface the validator message verbatim and stop. Length is checked only on the fields the server actually bounds (`title` and each `security_considerations` element); `pitfalls`/`key_files` are JSONB (unbounded). Beyond `length_limit` and the advisory pass, the validator does NOT check per-task Stride-API field shapes — those are the decomposer agent's responsibility, and any slip-through surfaces as a verbatim 422 in Step 9.
+A **fatal** validation failure here is an **agent regression** — the requirements-decomposer agent's contract guarantees a valid root-key=`goals` JSON within the length bounds. If you see one, the agent's prompt has drifted; surface the validator message verbatim and stop. Length is checked only on the fields the server actually bounds (`title` and each `security_considerations` element); `pitfalls`/`key_files` are JSONB (unbounded). Beyond each task's `title` and `type` (check (d)), `length_limit` and the advisory pass, the validator does NOT check per-task Stride-API field shapes — those are the decomposer agent's responsibility, and any slip-through surfaces as a verbatim 422 in Step 9.
 
 After the validator returns zero, also confirm that `decomposition_notes` exists at the root. It is required by the agent contract for documenting cross-goal claim ordering. If the key is missing, set it to an empty string before the next sub-step and emit a one-line warning — but do NOT fail; some single-goal decompositions legitimately have nothing cross-goal to document.
 

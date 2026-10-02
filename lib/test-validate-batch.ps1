@@ -167,6 +167,39 @@ if ($r.rc -ne 0 -and ($r.stderr -notmatch 'warning:')) {
     Fail "advisory: fatal must beat warning" ("rc=$($r.rc) stderr=$($r.stderr)")
 }
 
+# Stage 8b: (b)/(d) task-level fields and a stray root 'tasks' key (D341).
+
+Assert-FailsWith '(d) task missing title fails with its path' `
+    '{"goals":[{"title":"G","type":"goal","tasks":[{"title":"Ok","type":"work"},{"type":"work"}]}]}' `
+    'goals[0].tasks[1] is missing required field ''title'''
+
+Assert-FailsWith '(d) task with a whitespace-only title fails with its path' `
+    '{"goals":[{"title":"G","type":"goal","tasks":[{"title":"   ","type":"work"}]}]}' `
+    'goals[0].tasks[0].title must be a non-empty string'
+
+Assert-FailsWith '(d) task with a non-string title fails with its path' `
+    '{"goals":[{"title":"G","type":"goal","tasks":[{"title":42,"type":"work"}]}]}' `
+    'goals[0].tasks[0].title must be a non-empty string'
+
+Assert-FailsWith '(d) task missing type fails with its path' `
+    '{"goals":[{"title":"G","type":"goal","tasks":[{"title":"T"}]}]}' `
+    'goals[0].tasks[0] is missing required field ''type'''
+
+Assert-FailsWith '(d) task type ''goal'' fails with its path' `
+    '{"goals":[{"title":"G","type":"goal","tasks":[{"title":"T","type":"goal"}]}]}' `
+    'goals[0].tasks[0].type must be ''work'' or ''defect'', got ''goal'''
+
+Assert-FailsWith '(d) task that is a string instead of an object fails with its path' `
+    '{"goals":[{"title":"G","type":"goal","tasks":["just a title"]}]}' `
+    'goals[0].tasks[0] must be an object, got str'
+
+Assert-FailsWith '(b) root with both goals and tasks fails' `
+    '{"goals":[{"title":"G","type":"goal","tasks":[{"title":"T","type":"work"}]}],"tasks":[{"title":"Stray","type":"work"}]}' `
+    'root has both ''goals'' and ''tasks'''
+
+Assert-Silent '(d) a defect task with every scored field passes silently' `
+    '{"goals":[{"title":"G","type":"goal","tasks":[{"title":"Fix it","type":"defect","dependencies":[],"acceptance_criteria":"It works","testing_strategy":{"unit_tests":["one"]},"security_considerations":["None - test fixture"],"pitfalls":["none"],"patterns_to_follow":"existing"}]}]}'
+
 # Stage 9: real repo fixtures are structurally valid and within length bounds.
 Get-ChildItem (Join-Path $PluginRoot 'fixtures') -Filter '*-stride-batch.json' | ForEach-Object {
     Assert-OkFile "repo fixture valid + within length bounds: $($_.Name)" $_.FullName
