@@ -1,4 +1,4 @@
-# PowerShell twin of test-ship.sh — exercises lib/ship.py (the
+# PowerShell twin of test-ship.sh -- exercises lib/ship.py (the
 # stride-ideation-stridify skill's Step 3 preflight, the --batch payload check,
 # and Steps 9-10 POST + render) and the output of lib/read_auth.py, the way a
 # Windows host without bash runs them.
@@ -37,10 +37,10 @@ function Check([string]$Label, [bool]$Cond, [string]$Detail = '') { if ($Cond) {
 $script:SKIP = 0
 function Skip($m) { $script:SKIP++; Write-Host "  SKIP  $m" }
 
-Write-Host 'test-ship.ps1 — exercises ship.py and read_auth.py'
+Write-Host 'test-ship.ps1 -- exercises ship.py and read_auth.py'
 Write-Host ''
 
-# A fake value only — the tests assert it never escapes into argv or output.
+# A fake value only -- the tests assert it never escapes into argv or output.
 $Token = 'stride_dev_SHIP_TEST_TOKEN_9f3k'
 
 $Tmp = Join-Path ([System.IO.Path]::GetTempPath()) "sti-ship-ps1-$([System.IO.Path]::GetRandomFileName())"
@@ -142,7 +142,7 @@ if ($OnWindows) {
     & chmod +x (Join-Path $Bin 'curl')
 }
 
-# Invoke-Ship <case> <args> [-Env @{...}] [-Auth file] [-Cwd dir] — runs ship.py
+# Invoke-Ship <case> <args> [-Env @{...}] [-Auth file] [-Cwd dir] -- runs ship.py
 # against the fake curl with an isolated temp dir. Sets $script:C (case dir),
 # $script:Rc, $script:Out, $script:Err.
 # Quote arguments for ProcessStartInfo.Arguments (Windows command-line rules).
@@ -385,6 +385,7 @@ Invoke-Ship badpayload @((J 'broken.json')) -Env @{ FAKE_CODE = '201'; FAKE_BODY
 Assert-Rc 'unparseable batch: exits 1' 1
 Assert-Contains 'unparseable batch: names the payload failure' $script:Err "failed to prepare API payload from $(J 'broken.json')"
 Assert-NeverPosted 'unparseable batch: nothing is POSTed'
+Assert-NoToken 'unparseable batch: token is not printed'
 Assert-NoTempLeft 'unparseable batch: every temp file is removed'
 
 Invoke-Ship postlocal @((J 'batch.json')) -Auth (J 'auth-local-only.md') -Env @{ FAKE_CODE = '201'; FAKE_BODY = (J 'created.json') }

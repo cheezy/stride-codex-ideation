@@ -9,7 +9,8 @@ This plugin provides brainstorming and ideation skills for projects that use [St
 The two user-facing skills:
 
 ```text
-stride-ideation-ideate [<topic>] [--continue <path>] [--profile <name>]
+stride-ideation-ideate [<topic>] [--continue <path>] [--input <path>] [--profile <name>]
+  (each flag also takes the --flag=<value> form)
   Interactive ideation session. Drives a Q&A loop with you to produce a
   timestamped requirements markdown doc. Stop here if you only want a spec.
 
@@ -213,7 +214,7 @@ This plugin is a faithful port of [`cheezy/stride-ideation`](https://github.com/
 | `AskUserQuestion` tool name | "interactive question batch" — a single chat turn asking the user up to four related questions |
 | `Bash`, `Read`, `Write`, `Skill`, `Agent` tool names | Codex equivalents (`shell`, `read`, `write`, plus the skill-activation contract documented in `AGENTS.md`) |
 | `lib/filename.sh` only | `lib/filename.sh` + `lib/filename.ps1` mirror for Windows users |
-| `lib/test-*.sh` only | `lib/test-*.sh` + `lib/test-*.ps1` mirrors for Windows users |
+| `lib/test-*.sh` only | `lib/test-*.sh` + `lib/test-*.ps1` mirrors for Windows users: every bash case has a PowerShell counterpart of the same strength, except the inherently bash-only ones listed below, so PASS counts can differ: a twin may keep extra PowerShell-only cases, and it is short only by those bash-only cases. The inherently bash-only cases are `eval` of `read_auth.py` output, the executable-bit check, the terminal-stdin draft case, and running a skill's bash block, which the PowerShell twin replays as git commands. `lib/test-skill-blocks.sh` has no twin |
 | `lib/ship.sh` (bash) | `lib/ship.py` — one Python script both bash and PowerShell hosts call |
 
 The fixtures, the decomposer agent prompt and the reviewer agent rubric are byte-identical to upstream. The `lib/` Python helpers are ported from upstream with the same behavior; their docstrings name this port's skills and scripts.

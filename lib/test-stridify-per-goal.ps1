@@ -114,6 +114,236 @@ $docPath = Join-Path $TMP 'three-surfaces.md'
 [System.IO.File]::WriteAllText($docPath, "# Test doc`n`n## Goal`nA goal.`n`n## Decomposition seams`n`nThe surfaces:`n`n1. **Kanban app** — owns the JSON contract for the workflow`n2. **stride plugin** — adapter for the Claude reference workflow`n3. **stride-copilot** — adapter for GitHub Copilot`n`nShared notes:`n- All three surfaces ship independently`n- Coordination via SemVer`n`n## Other section`n")
 try {
 
+    # === cases 1-15: the bash suite's fixtures and reference snippets, one ===
+    # === for one (labels match test-stridify-per-goal.sh).                 ===
+
+    # Non-ASCII characters are built from code points so this file stays ASCII.
+    $EM = [string][char]0x2014   # em dash, as in the bash fixtures
+    $AR = [string][char]0x2192   # right arrow, as in the bash labels
+
+    function Write-Fixture([string]$Name, [string[]]$Lines) {
+        $f = Join-Path $TMP $Name
+        [System.IO.File]::WriteAllText($f, (($Lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+        return $f
+    }
+
+    # A realistic seven-surface requirements doc.
+    $seven = Write-Fixture 'seven-surfaces.md' @(
+        '# Some Feature', '', '## Problem', '', 'A description of the problem.', '',
+        '## Goal', '', 'The goal.', '', '## Outcome', '', 'The outcome.', '',
+        '## Decomposition seams', '',
+        '**This document must be decomposed into seven independent goals.**', '',
+        'The seven surfaces:', '',
+        "1. **Kanban app** (this repo: ``lib/kanban_web/...``) $EM defines the contract.",
+        "2. **stride plugin** (this repo: ``stride/``) $EM reference workflow.",
+        "3. **stride-copilot** (separate repo) $EM Copilot CLI adapter.",
+        "4. **stride-gemini** (separate repo) $EM Gemini CLI adapter.",
+        "5. **stride-codex** (separate repo) $EM Codex adapter.",
+        "6. **stride-opencode** (separate repo) $EM OpenCode adapter.",
+        "7. **stride-pi** (separate repo) $EM Pi Coding Agent adapter.",
+        '', '## Assumptions', '', 'Assumptions go here.'
+    )
+    # A doc WITHOUT a Decomposition seams section.
+    $noSeamsDoc = Write-Fixture 'no-seams.md' @(
+        '# Some Feature', '', '## Problem', '', 'Just one goal, no seams.', '',
+        '## Goal', '', 'A single goal.', '', '## Outcome', '', 'Done.'
+    )
+    # Seams section present but the numbered list is empty.
+    $emptySeamsDoc = Write-Fixture 'empty-seams.md' @(
+        '# Some Feature', '', '## Problem', '', 'Foo.', '', '## Decomposition seams', '',
+        'This section was added but no surfaces have been enumerated yet.', '',
+        '## Outcome', '', 'Outcome.'
+    )
+    # Item 2 has a multi-line body.
+    $multilineDoc = Write-Fixture 'multiline-body.md' @(
+        '# Doc', '', '## Decomposition seams', '',
+        "1. **First** $EM one-liner.",
+        "2. **Second** $EM line one of the body.",
+        '   Continuation line two.',
+        '   Continuation line three.',
+        "3. **Third** $EM back to one-liners."
+    )
+    # A seam literally named "1".
+    $seamOneDoc = Write-Fixture 'seam-named-one.md' @(
+        '# Doc', '', '## Decomposition seams', '',
+        "1. **Alpha** $EM first surface.",
+        "2. **1** $EM second surface, literally named `"1`".",
+        "3. **Gamma** $EM third surface."
+    )
+    # Items missing the **bold** marker.
+    $missingBoldDoc = Write-Fixture 'missing-bold.md' @(
+        '# Doc', '', '## Decomposition seams', '',
+        "1. **Valid** $EM has bold name.",
+        "2. Plain Name $EM missing bold; should be skipped.",
+        "3. **Also valid** $EM has bold name."
+    )
+
+    # Reference Step 1 parser (mirrors the bash parse_goal_arg and the stridify
+    # SKILL Step 1 --goal parse): whitespace-split the argument string;
+    # `--goal <v>` takes the NEXT token and drops both, `--goal=<v>` takes the
+    # text after the leading `--goal=` (the FIRST `=`, so a value holding `=`
+    # is kept whole) and drops the single token; every other token is the
+    # remainder, re-joined with single spaces.
+    function ConvertFrom-GoalArg([string]$ArgString) {
+        $tokens = @($ArgString -split '\s+' | Where-Object { $_ -ne '' })
+        $goal = ''
+        $rest = New-Object System.Collections.Generic.List[string]
+        $i = 0
+        while ($i -lt $tokens.Count) {
+            $t = $tokens[$i]
+            if ($t -ceq '--goal') {
+                $i++
+                $goal = if ($i -lt $tokens.Count) { $tokens[$i] } else { '' }
+                $i++
+                continue
+            }
+            if ($t.StartsWith('--goal=', [System.StringComparison]::Ordinal)) {
+                $goal = $t.Substring('--goal='.Length)
+            } else {
+                $rest.Add($t)
+            }
+            $i++
+        }
+        return @{ Goal = $goal; Rest = ($rest -join ' ') }
+    }
+
+    # Reference Step 5 slug composition (mirrors the bash SLUG_FOR_PATH_test).
+    function Get-SlugForPath([string]$DocSlug, [string]$GoalSlug = '') {
+        if ($GoalSlug) { return "$DocSlug-$GoalSlug" }
+        return $DocSlug
+    }
+
+    # Reference Step 8d commit-message composition (mirrors commit_msg_test).
+    function Get-CommitMessage([string]$DocSlug, [string]$GoalSlug = '') {
+        if ($GoalSlug) { return "stride-ideation: decomposition for $DocSlug goal $GoalSlug" }
+        return "stride-ideation: decomposition for $DocSlug"
+    }
+
+    function Get-Fields($tuple) { if ($tuple) { @(([string]$tuple) -split "`t") } else { @('', '', '') } }
+
+    # === case 1: --goal absent on a doc without seams stays in "all goals" ===
+    $c1 = ConvertFrom-GoalArg '/path/to/no-seams.md'
+    if ($c1.Goal -ceq '' -and $c1.Rest -ceq '/path/to/no-seams.md') {
+        Pass "case 1: --goal absent $AR empty GOAL_ARG, remainder is the path (AC8)"
+    } else { Fail 'case 1: parse with no flag' "goal='$($c1.Goal)' rest='$($c1.Rest)'" }
+
+    # === case 2: --goal "Kanban app" resolves to seam 1 by slug ===============
+    $c2 = Sti-ResolveGoal -Path $seven -GoalArg 'Kanban app'
+    $c2rc = $LASTEXITCODE
+    if ($c2rc -eq 0) {
+        $f = Get-Fields $c2
+        if ($f[0] -ceq '1' -and $f[1] -ceq 'Kanban app' -and $f[2] -ceq 'kanban-app') {
+            Pass "case 2: --goal 'Kanban app' $AR index=1 name='Kanban app' slug=kanban-app (AC1, AC2)"
+        } else { Fail 'case 2: wrong resolution' "idx=$($f[0]) name='$($f[1])' slug=$($f[2])" }
+    } else { Fail "case 2: Sti-ResolveGoal exited rc=$c2rc (expected 0)" }
+
+    # === case 3: --goal 3 resolves to seam 3 by integer index =================
+    $c3 = Sti-ResolveGoal -Path $seven -GoalArg '3'
+    if ($LASTEXITCODE -eq 0) {
+        $f = Get-Fields $c3
+        if ($f[0] -ceq '3' -and $f[2] -ceq 'stride-copilot') {
+            Pass "case 3: --goal 3 $AR integer-index resolves to stride-copilot (AC2)"
+        } else { Fail 'case 3: wrong integer resolution' "idx=$($f[0]) slug=$($f[2])" }
+    } else { Fail 'case 3: Sti-ResolveGoal exited non-zero on integer arg' }
+
+    # === case 4: hyphenated slug resolves correctly ===========================
+    $c4 = Sti-ResolveGoal -Path $seven -GoalArg 'stride-pi'
+    if ($LASTEXITCODE -eq 0) {
+        $f = Get-Fields $c4
+        if ($f[0] -ceq '7') {
+            Pass 'case 4: --goal stride-pi resolves to seam 7 (hyphenated slug, no integer collision)'
+        } else { Fail 'case 4: hyphenated slug resolved to wrong index' "idx=$($f[0])" }
+    } else { Fail 'case 4: Sti-ResolveGoal exited non-zero on hyphenated slug' }
+
+    # === case 5: --goal=<value> form parses identically =======================
+    $c5a = (ConvertFrom-GoalArg '--goal kanban-app /path/to/doc.md').Goal
+    $c5b = (ConvertFrom-GoalArg '--goal=kanban-app /path/to/doc.md').Goal
+    if ($c5a -ceq 'kanban-app' -and $c5b -ceq 'kanban-app') {
+        Pass 'case 5: --goal <v> and --goal=<v> parse to identical GOAL_ARG (AC1)'
+    } else { Fail 'case 5: dual-form parser disagrees' "form1='$c5a' form2='$c5b'" }
+
+    # === case 6: unresolved --goal errors with seam listing ===================
+    $null = Sti-ResolveGoal -Path $seven -GoalArg 'nonexistent' 2>$null
+    $c6rc = $LASTEXITCODE
+    if ($c6rc -eq 3) { Pass 'case 6: unresolved --goal returns rc=3 (AC4)' } else { Fail "case 6: expected rc=3, got rc=$c6rc" }
+    # The CALLER prints the available-seams list; Sti-ExtractSeams gives the data.
+    $c6count = @(Sti-ExtractSeams -Path $seven).Count
+    if ($c6count -eq 7) { Pass 'case 6: sti_extract_seams returns 7 seams for the listing (AC4 evidence)' } else { Fail "case 6: expected 7 seams, got $c6count" }
+
+    # === case 7: absent seams section returns rc=2 ============================
+    $c7 = Sti-ResolveGoal -Path $noSeamsDoc -GoalArg 'anything' 2>$null
+    $rc7 = $LASTEXITCODE
+    if ($rc7 -eq 0) { Fail 'case 7: resolver returned 0 on doc without seams section' }
+    elseif ($rc7 -eq 2 -and -not $c7) { Pass "case 7: doc without seams section $AR rc=2 (AC3)" }
+    else { Fail "case 7: expected rc=2 got rc=$rc7" }
+
+    # === case 8: empty seams section returns rc=4 =============================
+    $c8 = Sti-ResolveGoal -Path $emptySeamsDoc -GoalArg 'anything' 2>$null
+    $rc8 = $LASTEXITCODE
+    if ($rc8 -eq 0) { Fail 'case 8: resolver returned 0 on doc with empty seams list' }
+    elseif ($rc8 -eq 4 -and -not $c8) { Pass "case 8: empty seams list $AR rc=4 (testing_strategy edge)" }
+    else { Fail "case 8: expected rc=4 got rc=$rc8" }
+
+    # === case 9: path-suffix construction =====================================
+    $targetNoGoal = Sti-UniquePath -Dir $TMP -Timestamp '2026-05-15T210800' -Slug (Get-SlugForPath 'review-queue-code-diffs') -Artifact 'stride-batch' -Extension 'json'
+    $expectedNoGoal = "$TMP/2026-05-15T210800-review-queue-code-diffs-stride-batch.json"
+    if ($targetNoGoal -ceq $expectedNoGoal) { Pass 'case 9a: target path without --goal matches historical format (AC8)' }
+    else { Fail 'case 9a: target path mismatch' "got=$targetNoGoal want=$expectedNoGoal" }
+    $targetWithGoal = Sti-UniquePath -Dir $TMP -Timestamp '2026-05-15T210800' -Slug (Get-SlugForPath 'review-queue-code-diffs' 'kanban-app') -Artifact 'stride-batch' -Extension 'json'
+    $expectedWithGoal = "$TMP/2026-05-15T210800-review-queue-code-diffs-kanban-app-stride-batch.json"
+    if ($targetWithGoal -ceq $expectedWithGoal) { Pass 'case 9b: target path with --goal embeds goal slug between doc-slug and artifact (AC6)' }
+    else { Fail 'case 9b: target path mismatch' "got=$targetWithGoal want=$expectedWithGoal" }
+
+    # === case 10: commit-message construction =================================
+    $m10a = Get-CommitMessage 'review-queue-code-diffs'
+    $m10b = Get-CommitMessage 'review-queue-code-diffs' 'kanban-app'
+    if ($m10a -ceq 'stride-ideation: decomposition for review-queue-code-diffs') { Pass 'case 10a: commit message without --goal unchanged (AC8)' }
+    else { Fail 'case 10a: commit message mismatch' $m10a }
+    if ($m10b -ceq 'stride-ideation: decomposition for review-queue-code-diffs goal kanban-app') { Pass 'case 10b: commit message with --goal includes goal slug (AC6)' }
+    else { Fail 'case 10b: commit message mismatch' $m10b }
+
+    # === case 11: same --goal invoked twice produces -2 sibling ===============
+    $firstPath = "$TMP/2026-05-15T210800-review-queue-code-diffs-kanban-app-stride-batch.json"
+    New-Item -ItemType File -Path $firstPath -Force | Out-Null
+    $secondPath = Sti-UniquePath -Dir $TMP -Timestamp '2026-05-15T210800' -Slug 'review-queue-code-diffs-kanban-app' -Artifact 'stride-batch' -Extension 'json'
+    $expectedSecond = "$TMP/2026-05-15T210800-review-queue-code-diffs-kanban-app-stride-batch-2.json"
+    if ($secondPath -ceq $expectedSecond) { Pass 'case 11: re-invoking --goal on same doc produces -2 sibling (AC7)' }
+    else { Fail 'case 11: second-invocation path mismatch' "got=$secondPath want=$expectedSecond" }
+    Remove-Item -LiteralPath $firstPath -Force -ErrorAction SilentlyContinue
+
+    # === case 12: seam literally named "1" - integer wins =====================
+    $f = Get-Fields (Sti-ResolveGoal -Path $seamOneDoc -GoalArg '1')
+    if ($f[0] -ceq '1' -and $f[1] -ceq 'Alpha') { Pass "case 12: --goal 1 on doc with literal-1 seam $AR integer-index 1 wins (Alpha)" }
+    else { Fail 'case 12: integer-vs-slug heuristic wrong' "idx=$($f[0]) name=$($f[1])" }
+
+    # === case 13: multi-line item bodies - extractor uses first line only =====
+    $c13 = @(Sti-ExtractSeams -Path $multilineDoc)
+    $c13names = (@($c13 | ForEach-Object { ($_ -split "`t")[1] }) -join '|') + '|'
+    if ($c13.Count -eq 3 -and $c13names -ceq 'First|Second|Third|') {
+        Pass "case 13: multi-line item bodies $EM extractor uses bold-name from first line only (parser robustness)"
+    } else { Fail 'case 13: multi-line extraction wrong' "count=$($c13.Count) names=$c13names" }
+
+    # === case 14: items missing **bold** are silently skipped =================
+    $c14 = @(Sti-ExtractSeams -Path $missingBoldDoc)
+    $c14names = (@($c14 | ForEach-Object { ($_ -split "`t")[1] }) -join '|') + '|'
+    if ($c14.Count -eq 2 -and $c14names -ceq 'Valid|Also valid|') { Pass 'case 14: items lacking **bold** are skipped (parser robustness)' }
+    else { Fail 'case 14: missing-bold handling wrong' "count=$($c14.Count) names=$c14names" }
+
+    # === case 15: prompt scoping - drops other surfaces, keeps matched ========
+    $scoped15 = @(Sti-ScopeDocToSeam -Path $seven -Target 1)
+    if (@($scoped15 | Where-Object { $_ -cmatch '^1\. \*\*Kanban app\*\*' }).Count -gt 0) {
+        Pass 'case 15a: scoped prompt contains the matched item (Kanban app)'
+    } else { Fail 'case 15a: scoped prompt missing matched item' (($scoped15 | Select-Object -Last 20) -join ' / ') }
+    $others15 = @($scoped15 | Where-Object { $_ -cmatch '^[2-9]\. \*\*' })
+    if ($others15.Count -gt 0) { Fail 'case 15b: scoped prompt still contains other surface items' ($others15 -join ' / ') }
+    else { Pass 'case 15b: scoped prompt drops the other six surface items (AC5)' }
+    if (@($scoped15 | Where-Object { $_ -cmatch '^## Assumptions' }).Count -gt 0) {
+        Pass 'case 15c: scoped prompt preserves sections outside seams (## Assumptions still present)'
+    } else { Fail 'case 15c: scoped prompt dropped a section outside seams' }
+    if (($scoped15 -join "`n").Contains('**Scoped to a single surface for this dispatch.**')) {
+        Pass 'case 15d: scoped prompt includes the dispatch-scoping notice'
+    } else { Fail 'case 15d: scoped prompt missing dispatch-scoping notice' }
+
     # === cases 16-22: one seam definition for count, resolve and scope ======
 
     function New-SeamsDoc([string]$Name, [string]$Body) {
@@ -228,7 +458,7 @@ Shared contract:
     } else { Fail 'case 23: nested numbered steps' "names=$(Get-SeamNames $nestedSteps)" }
 
     $case22ok = $true
-    foreach ($doc in @($docPath, $bulleted, $headings, $mixed, $dashName)) {
+    foreach ($doc in @($docPath, $seven, $bulleted, $headings, $mixed, $dashName)) {
         foreach ($tuple in @(Sti-ExtractSeams -Path $doc)) {
             $parts = $tuple -split "`t"
             $text = (@(Sti-ScopeDocToSeam -Path $doc -Target ([int]$parts[0])) -join "`n")
