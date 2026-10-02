@@ -383,10 +383,10 @@ Either way the only input is the prompt from Step 7e, and the agent file is neve
 ```
 Run requirements-decomposer (instructions: <HELPER_ROOT>/agents/requirements-decomposer.md) with prompt:
   <the requirements doc text, fenced inside a "Requirements document:" block —
-   the only input the agent has access to>
+   the agent's primary input>
 ```
 
-The agent receives the requirements doc as its entire input (no codebase access, no Stride API access, no clarifying-question loop). Its instructions file documents the decomposition methodology, the canonical batch JSON shape, and the output contract.
+The agent receives the requirements doc as its input (it may use read and search on the project the doc names to ground `key_files`, marking unconfirmed paths as proposed; no Stride API access, no clarifying-question loop). Its instructions file documents the decomposition methodology, the canonical batch JSON shape, and the output contract.
 
 **(7a) Classify the outcome.** After each agent run — sub-agent or inline pass — classify the result before deciding whether to retry. This mirrors the explicit branching of Step 9c: every outcome maps to exactly one row.
 
