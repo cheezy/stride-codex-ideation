@@ -46,7 +46,7 @@ curl -fsSL https://raw.githubusercontent.com/cheezy/stride-codex-ideation/main/i
 
 ### Windows (PowerShell)
 
-Requires PowerShell 5.1+ or PowerShell Core 7+ and Git for Windows on `PATH`.
+Requires PowerShell 5.1+ or PowerShell 7+ and Git on `PATH`. `install.ps1` also runs under PowerShell 7 on macOS and Linux, where it installs into `~/.agents/` just as `install.sh` does.
 
 ```powershell
 irm https://raw.githubusercontent.com/cheezy/stride-codex-ideation/main/install.ps1 | iex
@@ -71,20 +71,47 @@ confined to a clearly delimited **managed block** (`<!-- BEGIN stride-ideation -
   and never duplicates the guidance. Keep your own notes *outside* the markers;
   anything between them is regenerated on each install.
 
-`install.sh` and `install.ps1` behave identically.
+- **Markers count only as whole lines.** A marker quoted inside a line of your
+  prose is ignored, and an orphaned or out-of-order marker (a `BEGIN` with no
+  `END`, an `END` before any `BEGIN`) never causes any of your text to be
+  replaced — the block is appended instead, and later runs refresh that block.
+  A marker line ending in CRLF still counts, so a block checked out with Windows
+  line endings is refreshed, not duplicated.
+- **Your bytes are kept as they are** — whatever encoding your `AGENTS.md` uses
+  (UTF-8 with or without a BOM, or a legacy code page), only the managed block
+  changes.
+- **A symlinked `AGENTS.md` is refused**, never written through, so a project
+  cannot redirect the installer into another file.
+
+`install.sh` and `install.ps1` behave identically and write byte-identical `AGENTS.md` files for the same input (`lib/test-install.sh` and `lib/test-install.ps1` check this offline).
+
+### Where the files go
+
+```
+<install-dir>/                    ~/.agents/ (global) or ./.agents/ (--project)
+├── skills/<skill>/SKILL.md       where Codex discovers skills
+├── agents/<agent>.md             where Codex discovers agents
+└── stride-codex-ideation/        this plugin's helper root
+    ├── lib/                      helper scripts the skills run
+    └── fixtures/                 calibration fixtures for the smoke test
+```
+
+The helper root is this plugin's own directory, so no other tool installing into the same `.agents/` can overwrite its helpers. Each install clears and rewrites it, so files a newer release no longer ships disappear; nothing outside it is ever deleted. The installer prints the resolved helper root at the end. Releases before this layout copied the helpers into the shared `<install-dir>/lib/` and `<install-dir>/fixtures/`; the installer points those out when it finds them but never deletes them, since other tools may use the same directories.
 
 ### Manual installation
 
 ```bash
 git clone https://github.com/cheezy/stride-codex-ideation.git
 
-# Copy skills, agents, and helpers into the location Codex auto-discovers
-cp -r stride-codex-ideation/skills/ .agents/skills/
-cp -r stride-codex-ideation/agents/ .agents/agents/
+# Copy skills and agents into the location Codex auto-discovers
+mkdir -p .agents/skills .agents/agents .agents/stride-codex-ideation
+cp -r stride-codex-ideation/skills/. .agents/skills/
+cp -r stride-codex-ideation/agents/. .agents/agents/
 cp stride-codex-ideation/AGENTS.md AGENTS.md
 
-# The lib/ helpers and fixtures/ stay alongside the skills — the
-# stridify skill resolves them via <plugin-root>/lib/.
+# The helpers and fixtures go in the plugin's own helper root — the
+# skills resolve them via <plugin-root>/lib/.
+cp -R stride-codex-ideation/lib stride-codex-ideation/fixtures .agents/stride-codex-ideation/
 ```
 
 On Windows, use `Copy-Item -Recurse` for the equivalent.

@@ -145,13 +145,30 @@ if ($OnWindows) {
 # Invoke-Ship <case> <args> [-Env @{...}] [-Auth file] [-Cwd dir] — runs ship.py
 # against the fake curl with an isolated temp dir. Sets $script:C (case dir),
 # $script:Rc, $script:Out, $script:Err.
+# Quote arguments for ProcessStartInfo.Arguments (Windows command-line rules).
+# ProcessStartInfo.ArgumentList would be simpler, but Windows PowerShell 5.1 runs
+# on .NET Framework, which does not have it.
+function Join-ProcessArgs([string[]]$Values) {
+    $quoted = foreach ($v in $Values) {
+        if ($v -ne '' -and $v -notmatch '[\s"]') { $v; continue }
+        $out = '"'; $bs = 0
+        foreach ($ch in $v.ToCharArray()) {
+            if ($ch -eq '\') { $bs++; continue }
+            if ($ch -eq '"') { $out += ('\' * ($bs * 2 + 1)) + '"' } else { $out += ('\' * $bs) + $ch }
+            $bs = 0
+        }
+        $out + ('\' * ($bs * 2)) + '"'
+    }
+    return ($quoted -join ' ')
+}
+
 function Start-Ship {
     param([string]$Case, [string[]]$ShipArgs, [hashtable]$Env = @{}, [string]$Auth = (J 'auth.md'), [string]$Cwd = $Tmp)
     $script:C = J "case-$Case"
     New-Item -ItemType Directory -Force -Path (Join-Path $script:C 'log'), (Join-Path $script:C 'tmpdir') | Out-Null
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $Python
-    foreach ($a in @($Ship) + @($ShipArgs)) { $psi.ArgumentList.Add($a) }
+    $psi.Arguments = Join-ProcessArgs (@($Ship) + @($ShipArgs))
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
