@@ -125,6 +125,23 @@ On a `--continue` session the round-1 recap reflects whatever the prior document
 
 When the `stride-ideation-ideate` skill threads `input_notes` (the `--input` brain-dump seed, analogous to `prior_doc` but raw rather than a committed requirements doc), the skill pre-populates draft sections wherever the notes clearly map to a gated section and the round-1 recap reflects that seeding — but a seeded section starts at **thin**, not **solid**, because unconfirmed brain-dump content has not yet been verified section-by-section with the human. The seed lowers the starting cost, never the bar: every hard gate, the round-3 framing checkpoint, the premortem, and the reviewer pass still run, and the rounds focus on the gaps the notes did not cover. `input_notes` and `prior_doc` are independent and may both be present in one session.
 
+## Autosave
+
+**Mandatory whenever the stride-ideation-ideate skill passes a non-empty `draft_path`.** After every round — once that round's answers are folded into the draft, before the next round's recap — write the current draft to `draft_path` with Codex CLI's **file-write tool**, replacing the file. The draft is a markdown file holding every section drafted so far, laid out as the requirements template lays them out, under a short round-state header:
+
+> `<!-- stride-ideation draft — slug: <slug>; profile: <profile>; completed round: <N>; next: <what the next round targets> -->`
+
+**On start, load an existing draft.** At round 1, if the file at `draft_path` exists and is non-empty (a resumed draft — the stride-ideation-ideate skill's Step 4d only hands one over after the user chose "Resume"), read it with the file-read tool and use it as starting context, the way `prior_doc` is used: drafted sections start at **thin** in the round-1 recap, and the round-state header says where the session stopped.
+
+Rules:
+
+- **Use the file-write tool, never a shell call, for the content.** The draft is user prose; putting it on a command line or in a heredoc would mean shell-quoting arbitrary text. (A script that needs to save a draft can pipe the content to `sti_draft_save <path>` on stdin, or to `Sti-DraftSave <path>` on the PowerShell pipeline; the skill itself never does.)
+- **Never write the Stride API token or any other secret** into the draft — it holds only the session's draft prose and round state.
+- **Autosave is not a gate bypass.** A resumed draft is a starting point, not a confirmed answer: every hard gate, the round-3 framing checkpoint, the round-4 premortem, the challenge gate and the reviewer pass still run in full, and resumed sections are confirmed with the human like seeded ones.
+- **A failed write never blocks the session.** If the write fails, say so once in one line and continue; autosave is a recovery convenience.
+- **The scratch file is never committed.** The stride-ideation-ideate skill's Step 4d creates `.stride/` with its own `.gitignore` (containing `*`) before the first round and checks with `git check-ignore` that a draft there really is ignored; when it is not — an existing `.stride/.gitignore` that does not cover drafts — or `.stride` is a link, Step 4d turns autosave off (an empty `draft_path`) instead of editing the user's file. So whenever a `draft_path` reaches this skill the draft stays out of `git add -A`; the file is never `git add`-ed, and that skill's Step 9 deletes it once the requirements doc is committed.
+- **Never follow a link.** `draft_path` is a regular file under the project's `.stride/` — draft discovery never offers a symbolic link — so if it has become a link, stop autosaving for the session rather than read or write through it.
+
 ## Uncertainty path
 
 **Mandatory on every gated-section question and every forcing question.** Alongside the real answer choices, every question whose answer feeds a gated section or a profile-specific forcing question MUST offer a first-class choice that means **"I'm not sure — propose candidates for me,"** presented through Codex CLI's own question UI (not Claude Code's `AskUserQuestion`). The most valuable moments in ideation are exactly when the user is uncertain; without this escape hatch a forced pick leaves them only two bad choices — bail, or enter a low-quality answer. The choice turns the skill into a thinking partner instead of an interrogator.

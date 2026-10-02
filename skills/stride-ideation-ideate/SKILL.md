@@ -28,7 +28,7 @@ Codex runs every shell call as a fresh process, so every fenced `bash` block in 
 - **Failure is a non-zero status, never the end of your shell.** Each block's body runs inside `( … )`, so an `exit 1` ends only that subshell and the call returns non-zero. When a block returns non-zero, relay its `stride-ideation:` stderr verbatim and stop the skill — do not run the next step.
 - **Optional values carry a default.** A value that may legitimately be absent (`CONTINUE_PATH`, `DRAFT_PATH`) is written `'<value of NAME, or empty>'` and read as `${NAME:-}`; carry it as `''` when the step that would produce it did not run.
 
-**On a Windows host without bash**, run the PowerShell equivalent each step names: dot-source `lib/filename.ps1` or `lib/draft.ps1` from `HELPER_ROOT` and call the `Sti-` cmdlet with the same arguments (`sti_slugify` → `Sti-Slugify`, `sti_slug_from_path` → `Sti-SlugFromPath`, `sti_unique_path` → `Sti-UniquePath`, `sti_draft_find` → `Sti-DraftFind`, `sti_draft_path` → `Sti-DraftPath`, `sti_draft_clear` → `Sti-DraftClear`). The same rules apply: carried-forward values are single-quoted literals, and inside one you double every single-quote character PowerShell recognises — the ASCII `'` and the typographic `‘` `’` `‚` `‛` alike (`'` becomes `''`, `’` becomes `’’`, and so on), because PowerShell ends a single-quoted string at any of them; a failed cmdlet or a non-zero `$LASTEXITCODE` stops the skill.
+**On a Windows host without bash**, run the PowerShell equivalent each step names: dot-source `lib/filename.ps1` or `lib/draft.ps1` from `HELPER_ROOT` and call the `Sti-` cmdlet with the same arguments (`sti_slugify` → `Sti-Slugify`, `sti_slug_from_path` → `Sti-SlugFromPath`, `sti_unique_path` → `Sti-UniquePath`, `sti_draft_dir` → `Sti-DraftDir`, `sti_draft_find` → `Sti-DraftFind`, `sti_draft_path` → `Sti-DraftPath`, `sti_draft_clear` → `Sti-DraftClear`). The same rules apply: carried-forward values are single-quoted literals, and inside one you double every single-quote character PowerShell recognises — the ASCII `'` and the typographic `‘` `’` `‚` `‛` alike (`'` becomes `''`, `’` becomes `’’`, and so on), because PowerShell ends a single-quoted string at any of them; a failed cmdlet or a non-zero `$LASTEXITCODE` stops the skill.
 
 ## Resolving the helper root
 
@@ -177,9 +177,9 @@ If `INPUT_PATH` is set, **read-only** load its content via the platform's file-r
 
 ### Step 4d: Detect an unfinished draft and resolve the autosave path
 
-The requirements doc is not written until the hard gate passes (Step 8), so an interruption mid-session would otherwise lose every answer. To make a session recoverable, the `stride-ideation-ideate` skill autosaves the in-progress draft to a **gitignored** scratch file under `.stride/` (see Step 5), and on start it offers to resume any unfinished draft for the **same slug**.
+The requirements doc is not written until the hard gate passes (Step 8), so an interruption mid-session would otherwise lose every answer. To make a session recoverable, the `stride-ideation-ideate` skill autosaves the in-progress draft to a scratch file under a **self-ignoring** `.stride/` directory (see Step 5 and **Autosave** in `skills/stride-ideation/SKILL.md`), and on start it offers to resume any unfinished draft for the **same slug**.
 
-Look for an existing draft keyed by `SLUG` (resume keys on the slug, not `SESSION_TS`, because a fresh run has a new timestamp) and compute this session's fresh draft path, in one block:
+Create the scratch directory, look for an existing draft keyed by `SLUG` (resume keys on the slug, not `SESSION_TS`, because a fresh run has a new timestamp) and compute this session's fresh draft path, in one block:
 
 ```bash
 (
@@ -190,15 +190,26 @@ SLUG='<value of SLUG>'
 [ -f "$HELPER_ROOT/lib/filename.sh" ] || { echo "stride-ideation: cannot find the plugin helpers at $HELPER_ROOT; resolve the helper root again (see Resolving the helper root)." >&2; exit 1; }
 . "$HELPER_ROOT/lib/draft.sh"
 
-EXISTING_DRAFT="$(sti_draft_find .stride "$SLUG" 2>/dev/null || true)"
-printf 'existing_draft=%s\n' "$EXISTING_DRAFT"
-printf 'fresh_draft=%s\n' "$(sti_draft_path .stride "$SESSION_TS" "$SLUG")"
+# Create .stride/ with its own .gitignore ('*') before the first round, so the
+# draft can never be committed — the project's own .gitignore is not touched.
+# If drafts there would still not be ignored (or .stride is a link), autosave
+# is off for this session rather than risk a commit.
+if sti_draft_dir .stride; then
+  printf 'autosave=on\n'
+  EXISTING_DRAFT="$(sti_draft_find .stride "$SLUG" 2>/dev/null || true)"
+  printf 'existing_draft=%s\n' "$EXISTING_DRAFT"
+  printf 'fresh_draft=%s\n' "$(sti_draft_path .stride "$SESSION_TS" "$SLUG")"
+else
+  printf 'autosave=off\n'
+fi
 )
 ```
 
-PowerShell: dot-source `<HELPER_ROOT>/lib/draft.ps1` and call `Sti-DraftFind` and `Sti-DraftPath` with the same arguments.
+PowerShell: dot-source `<HELPER_ROOT>/lib/draft.ps1` and call `Sti-DraftDir`, `Sti-DraftFind` and `Sti-DraftPath` with the same arguments.
 
-`sti_draft_find` returns the latest **non-empty** scratch draft matching `<ts>-$SLUG-draft.md` under `.stride/`, or nothing when none exists (an empty or absent scratch yields no offer — a partial/corrupt draft safely falls back to a fresh session). Resolve `DRAFT_PATH` for this session from the two printed values:
+`sti_draft_find` returns the latest **non-empty** scratch draft named exactly `<YYYY-MM-DDTHHMMSS>-$SLUG-draft.md` under `.stride/` — the slug must follow the timestamp directly, so a longer slug that merely ends in this one (`dark-mode-toggle` for `toggle`) never matches — or nothing when none exists (an empty or absent scratch yields no offer — a partial/corrupt draft safely falls back to a fresh session). Resolve `DRAFT_PATH` for this session from the printed values:
+
+- **If the block printed `autosave=off`**, tell the user once, in one line, why (relay the `sti_draft_dir` message: `.stride/` has a `.gitignore` that does not cover drafts, or is a link), record `DRAFT_PATH` as `''`, and continue — autosave is a convenience, and an empty `draft_path` turns it off. Never edit the user's `.stride/.gitignore` to make it work.
 
 - **If `existing_draft` is non-empty**, ask the user via Codex CLI's question UI (NOT Claude Code's `AskUserQuestion`) whether to **resume** that draft or **start fresh** (offer "Resume" as the first option). On resume, record `DRAFT_PATH` as the `existing_draft` value, so the session continues autosaving to — and the skill loads from — that same file. On start-fresh, discard the abandoned draft with the block below (`EXISTING_DRAFT` is the `existing_draft` value), then record `DRAFT_PATH` as the `fresh_draft` value:
 
@@ -215,7 +226,7 @@ PowerShell: dot-source `<HELPER_ROOT>/lib/draft.ps1` and call `Sti-DraftFind` an
 
 - **If `existing_draft` is empty** (none found), record `DRAFT_PATH` as the `fresh_draft` value — a fresh per-session scratch path.
 
-Only same-slug drafts are ever offered; a draft for a different in-flight topic is never surfaced here. The `.stride/` scratch directory is gitignored (see the project `.gitignore`) and the scratch file is **never** `git add`-ed or committed, and **never** holds the Stride API token or any other secret — it carries only the in-progress draft prose.
+Only same-slug drafts are ever offered; a draft for a different in-flight topic is never surfaced here. The `.stride/` scratch directory ignores itself — `sti_draft_dir` writes `.stride/.gitignore` containing `*` when it is absent (an existing one is never overwritten), so no project `.gitignore` entry is needed and the user's own `.gitignore` is never edited; when an existing `.stride/.gitignore` does not cover drafts, `sti_draft_dir` says so and autosave stays off — and the scratch file is **never** `git add`-ed or committed, and **never** holds the Stride API token or any other secret — it carries only the in-progress draft prose.
 
 ### Step 5: Drive the `stride-ideation` protocol skill
 
@@ -237,7 +248,7 @@ When `PRIOR_DOC` is non-empty, the protocol skill starts the session with that c
 
 When `INPUT_NOTES` is non-empty, the protocol skill pre-populates draft sections from that freeform brain-dump wherever the notes clearly map to a gated section, then focuses the rounds on the gaps and weak sections rather than re-eliciting every section from scratch. Seeded content is a *draft starting point*, not a confirmed answer: it never satisfies a hard gate on its own — every gated section the seed pre-fills is still confirmed (or sharpened) with the human in the rounds, and sections the notes do not cover are asked normally. `prior_doc` and `input_notes` are independent and may both be present in one session.
 
-`draft_path=<DRAFT_PATH>` (resolved in Step 4d) is the gitignored scratch file for **intra-session autosave**. The protocol skill persists the in-progress draft — the answered sections plus the round state — to that path with the platform's file-write tool (the equivalent of `lib/draft.sh`'s `sti_draft_save`) **after every round**, so an interruption after any round is recoverable rather than losing every answer. If `DRAFT_PATH` already holds content (a resumed draft from Step 4d), the skill loads it as starting context at round 1. The scratch file holds only draft prose: it is gitignored, never `git add`-ed, and never carries the Stride API token or any other secret. Autosave is a recovery convenience, not a gate bypass — the hard gates, framing checkpoint, premortem, and reviewer pass still run in full.
+`draft_path=<DRAFT_PATH>` (resolved in Step 4d) is the scratch file for **intra-session autosave**. The protocol skill's **Autosave** section is the contract: it writes the in-progress draft — the answered sections plus a round-state header — to that path with the file-write tool **after every round**, so an interruption after any round is recoverable rather than losing every answer, and if `DRAFT_PATH` already holds content (a resumed draft from Step 4d) it loads it as starting context at round 1. The scratch file holds only draft prose: it sits in the self-ignoring `.stride/` directory, is never `git add`-ed, and never carries the Stride API token or any other secret. Autosave is a recovery convenience, not a gate bypass — the hard gates, framing checkpoint, premortem, and reviewer pass still run in full.
 
 The parsed value of `--profile` from Step 1 is threaded into the protocol skill as `profile=<PROFILE>`. It selects which forcing questions run inside the rounds and which optional sections the document may include. See the **Profiles** subsection of `skills/stride-ideation/SKILL.md` for the per-profile augmentations. `--profile=lean` (the default) leaves the round loop unchanged from upstream v0.3.0; `--profile=product`, `--profile=discovery`, and `--profile=lean-startup` add advisory rubric checks and (for `product` and `lean-startup`) one optional section.
 
@@ -376,7 +387,7 @@ DRAFT_PATH='<value of DRAFT_PATH, or empty>'
 [ -f "$HELPER_ROOT/lib/filename.sh" ] || { echo "stride-ideation: cannot find the plugin helpers at $HELPER_ROOT; resolve the helper root again (see Resolving the helper root)." >&2; exit 1; }
 . "$HELPER_ROOT/lib/draft.sh"
 # The session succeeded — the committed doc supersedes the scratch draft.
-# Delete the gitignored autosave file so no stale draft lingers to be offered
+# Delete the ignored autosave file so no stale draft lingers to be offered
 # for resume next time. Idempotent: a no-op if the draft was never written.
 if [ -n "${DRAFT_PATH:-}" ]; then
   sti_draft_clear "$DRAFT_PATH" || exit 1
@@ -384,7 +395,7 @@ fi
 )
 ```
 
-The `sti_draft_clear "$DRAFT_PATH"` call (or `Sti-DraftClear` on Windows) runs **only after the commit succeeds** — the scratch draft is the recovery artifact, so it survives until the real doc is committed and is then removed so no stale autosave is offered for resume on a future run. The scratch file lives under the gitignored `.stride/` directory and is never part of the commit's file list.
+The `sti_draft_clear "$DRAFT_PATH"` call (or `Sti-DraftClear` on Windows) runs **only after the commit succeeds** — the scratch draft is the recovery artifact, so it survives until the real doc is committed and is then removed so no stale autosave is offered for resume on a future run. The scratch file lives under the self-ignoring `.stride/` directory and is never part of the commit's file list.
 
 Commit message format: `stride-ideation: requirements for <slug>` (fresh) or `stride-ideation: refine requirements for <slug>` (continue). Do not include the session timestamp in the message — the filename already carries it.
 
