@@ -13,11 +13,13 @@ stride-ideation-ideate [<topic>] [--continue <path>] [--profile <name>]
   Interactive ideation session. Drives a Q&A loop with you to produce a
   timestamped requirements markdown doc. Stop here if you only want a spec.
 
-stride-ideation-stridify <path-to-requirements.md> [--goal <name|index>]
+stride-ideation-stridify <path-to-requirements.md> [--goal <name|index>] [--yes]
+stride-ideation-stridify --batch <path-to-stride-batch.json> [--yes]
   End-to-end pipeline: validates the requirements doc, preflights auth,
   dispatches the decomposer agent, stamps audit metadata, writes and
   commits a sibling Stride batch JSON, then POSTs it to /api/tasks/batch
   on your Stride instance and renders the created G/W identifiers.
+  --batch ships a batch JSON already on disk without decomposing again.
   --goal scopes the dispatch to one surface from the doc's
   ## Decomposition seams section (see the upstream "Resilience model" below).
 ```
@@ -143,6 +145,16 @@ When the requirements doc has many surfaces (`## Decomposition seams` with > 3 i
 
 Each `--goal` run produces a sibling batch JSON named `<source-slug>-<goal-slug>-stride-batch.json`.
 
+To ship a batch JSON that is already on disk — one you declined at the approval gate, one a failed POST left behind, or one saved from a retry-exhaustion recovery — use `--batch` instead of a requirements path:
+
+```
+> Activate stride-ideation-stridify with --batch docs/ideation/2026-05-12T120000-foo-stride-batch.json
+```
+
+`--batch` validates the file, refuses it if it contains your API token, previews the goals and tasks, asks for approval (unless `--yes`), and ships it. It never re-runs the decomposer, never rewrites the file, and creates no commit. It cannot be combined with `--goal`. Shipping a batch that was already shipped creates every goal and task a second time, so check the Backlog column first.
+
+Every POST goes through `lib/ship.py`, one Python script that bash and PowerShell hosts both call (`python3`, or `python` / `py -3` on Windows). It reads `.stride_auth.md`, strips the local audit fields, validates the exact payload, and POSTs with curl — the token on curl's stdin, never on a command line, in a file or in a log — then renders the created identifiers. It never retries the POST.
+
 ## How this plugin relates to `stride-codex`
 
 [`stride-codex`](https://github.com/cheezy/stride-codex) and `stride-codex-ideation` are sibling plugins with different scopes:
@@ -172,8 +184,9 @@ This plugin is a faithful port of [`cheezy/stride-ideation`](https://github.com/
 | `Bash`, `Read`, `Write`, `Skill`, `Agent` tool names | Codex equivalents (`shell`, `read`, `write`, plus the skill-activation contract documented in `AGENTS.md`) |
 | `lib/filename.sh` only | `lib/filename.sh` + `lib/filename.ps1` mirror for Windows users |
 | `lib/test-*.sh` only | `lib/test-*.sh` + `lib/test-*.ps1` mirrors for Windows users |
+| `lib/ship.sh` (bash) | `lib/ship.py` — one Python script both bash and PowerShell hosts call |
 
-The fixtures, the decomposer agent prompt, the reviewer agent rubric, and the lib/ helpers' Python scripts are byte-identical to upstream.
+The fixtures, the decomposer agent prompt and the reviewer agent rubric are byte-identical to upstream. The `lib/` Python helpers are ported from upstream with the same behavior; their docstrings name this port's skills and scripts.
 
 ## Re-running the interactive end-to-end test
 

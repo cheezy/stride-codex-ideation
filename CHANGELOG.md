@@ -4,6 +4,20 @@ All notable changes to the `stride-codex-ideation` plugin are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The stridify ship path no longer leaks the token or depends on bash (D336).** Steps 3, 9 and 10 were model-followed bash fragments: Step 3 `eval`ed unquoted `lib/read_auth.py` output (a URL holding `&` came back empty, and one holding `;cmd` ran the command), Step 9 put the bearer token and the whole payload on curl's command line and assumed the token survived from Step 3 across separate Codex shell calls, and Step 10 crashed with a traceback when a 2xx body was not the expected JSON object — after the batch had already been created, inviting a duplicate re-run. The skill also claimed `curl -H` keeps the token out of the process list, which is false.
+  - New `lib/ship.py` does auth, strip, validate, POST and render in one process, from bash and PowerShell alike: the token reaches curl through `curl -K -` on stdin (never argv, never a file, never a child's environment), the payload goes with `--data-binary @<mode-600 temp file>`, every body or curl message printed is token-scrubbed, every temp file is removed on success, failure and interrupt (INT, TERM, HUP and QUIT, even when a background launch handed the process SIGINT/SIGQUIT already ignored), and a 2xx it cannot render prints a do-not-re-run notice and exits 0. Step 3 is now `ship.py --check-auth`; Steps 9-10 are one `ship.py <batch>` call; the Step 8.5a preview is `ship.py --preview <batch>`, so the preview, like every other ship step, runs unchanged on a bash-less Windows host. A batch that fails validation has the validator's message token-scrubbed, since the validator quotes some batch content and runs before the token screen.
+  - `lib/read_auth.py` shell-quotes both values (`shlex.quote`), so any remaining `eval` caller is safe.
+  - `lib/run_smoke_test.{sh,ps1}` Stage 7 (live) ships through `lib/ship.py` instead of hand-rolling the POST.
+
+### Added
+
+- **`--batch <path>` for `stride-ideation-stridify` (D336).** Ships a batch JSON already on disk — declined at the approval gate, left by a failed POST, or saved from a Step 7.5 recovery — without re-running the decomposer: it validates the file, refuses one containing the API token (`ship.py --check-payload`), warns about shipping twice, runs the Step 8.5 preview and approval gate (honoring `--yes`), and ships through `lib/ship.py`, creating no commit and never rewriting the file. Accepts `--batch <v>` and `--batch=<v>`; rejected together with `--goal`. The decline message and the Step 7.5 recovery README now point at it instead of a hand-written authenticated POST.
+- **`lib/test-ship.sh` and `lib/test-ship.ps1`** — twin suites driving `lib/ship.py` against a fake curl: every status branch, the token-absence and verbatim-body guarantees, the preview, temp-file cleanup including mid-POST SIGINT/SIGTERM, the `--batch` helper sequence against a committed batch, and the shape of the stridify skill text. `lib/test-stridify-preview.{sh,ps1}` gain the `--batch` parse-shape cases (`--batch <v>`, `--batch=<v>` with an `=` in the value, bare `--batch`, `--batch=`, `--batch --yes`, with `--goal`, with a leftover doc path) and now render through the real `ship.py --preview`.
+
 ## [0.3.1] - 2026-08-21
 
 Documentation only. The ideation loop, the decomposer, and the plugin's command-skills are unchanged.

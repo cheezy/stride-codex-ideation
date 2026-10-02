@@ -17,7 +17,7 @@ Result: **14 ✓, 0 ✗**, `14 passed, 0 failed`.
 
 ## What was NOT verified in this capture
 
-- **Stage 7: live HTTP POST to a Stride instance.** `lib/run_smoke_test.sh --live <batch.json>` exercises this stage end-to-end (read auth → strip → POST → render real response). It was not run during this capture because the available Stride instance (`https://www.stridelikeaboss.com`) is the human's production workspace, not a dedicated dev environment. The W422 pitfall explicitly warned against testing against prod.
+- **Stage 7: live HTTP POST to a Stride instance.** `lib/run_smoke_test.sh --live <batch.json>` exercises this stage end-to-end through `lib/ship.py` (read auth → strip → validate → POST → render real response, in one process). It was not run during this capture because the available Stride instance (`https://www.stridelikeaboss.com`) is the human's production workspace, not a dedicated dev environment. The W422 pitfall explicitly warned against testing against prod.
 
 - **Interactive `stride-ideation-ideate` Q&A loop.** The ideation skill drives a multi-turn question-and-answer conversation via the platform's question UI that cannot be exercised from a non-interactive smoke-test runner. Coverage of that flow lives in the human-driven end-to-end procedure documented in the README's *Re-running the interactive end-to-end test* section.
 

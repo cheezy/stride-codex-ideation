@@ -68,7 +68,10 @@ $bodyTemplate = @'
 
 ## Recovery instructions
 
-Paste the prompt block above into a fresh session...
+Paste the prompt block above into a fresh session... Then activate the
+stride-ideation-stridify skill with --batch "<BATCH_TARGET_PATH>", which
+validates, previews, asks for approval and ships it through lib/ship.py.
+Never hand-write an authenticated curl for it.
 '@
 if ($bodyTemplate -match 'stride_dev_|Bearer ') {
     Fail "saved-prompt body template contains token-shaped content"

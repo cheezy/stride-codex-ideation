@@ -36,13 +36,18 @@ activate stride-ideation-stridify <path-to-requirements.md>
     transient failures), stamps audit metadata, writes and commits
     the batch JSON, POSTs to /api/tasks/batch, renders the created
     G/W identifier table
+
+activate stride-ideation-stridify --batch <path-to-stride-batch.json>
+  → validates an existing batch JSON, screens it for the API token,
+    previews it, gates on approval, and ships it — no decomposition,
+    no rewrite, no commit
 ```
 
 The stridify step is optional — the requirements doc is a deliverable on its own. Activate stridify only when the user wants the tasks created in Stride.
 
 ## API Authorization
 
-The `stride-ideation-stridify` skill reads `.stride_auth.md` from the project root for `STRIDE_API_URL` and `STRIDE_API_TOKEN`. The user authorizes Stride API calls by initiating the workflow — never prompt for permission before the POST. Never log the token, even in error paths.
+The `stride-ideation-stridify` skill reads `.stride_auth.md` from the project root for `STRIDE_API_URL` and `STRIDE_API_TOKEN`. The user authorizes Stride API calls by initiating the workflow — never prompt for permission before the POST. Never log the token, even in error paths. Every read of the file and every POST goes through `lib/ship.py` (`--check-auth` for the preflight, `<batch.json>` for the POST), which keeps the token off every command line — never `eval` `lib/read_auth.py` output or hand-write an authenticated curl.
 
 `.stride_auth.md` must be listed in `.gitignore`. The bundled `.gitignore` template already excludes it.
 
