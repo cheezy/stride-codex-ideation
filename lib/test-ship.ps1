@@ -176,7 +176,7 @@ function Start-Ship {
     $psi.EnvironmentVariables['PATH'] = $Bin + [System.IO.Path]::PathSeparator + $env:PATH
     foreach ($v in 'TMPDIR', 'TMP', 'TEMP') { $psi.EnvironmentVariables[$v] = (Join-Path $script:C 'tmpdir') }
     $psi.EnvironmentVariables['FAKE_LOG_DIR'] = (Join-Path $script:C 'log')
-    foreach ($v in 'STRIDE_API_TOKEN', 'STRIDE_API_URL', 'CLAUDE_PROJECT_DIR', 'FAKE_CODE', 'FAKE_BODY', 'FAKE_EXIT', 'FAKE_STDERR', 'FAKE_SLEEP') {
+    foreach ($v in 'STRIDE_API_TOKEN', 'STRIDE_API_URL', 'FAKE_CODE', 'FAKE_BODY', 'FAKE_EXIT', 'FAKE_STDERR', 'FAKE_SLEEP') {
         $psi.EnvironmentVariables.Remove($v)
     }
     if ($Auth) { $psi.EnvironmentVariables['STRIDE_AUTH_FILE'] = $Auth } else { $psi.EnvironmentVariables.Remove('STRIDE_AUTH_FILE') }
@@ -272,6 +272,15 @@ Copy-Item (J 'auth.md') (Join-Path $proj '.stride_auth.md')
 Invoke-Ship check-cwd @('--check-auth') -Auth '' -Cwd $proj
 Assert-Rc 'check-auth: finds .stride_auth.md in the current directory' 0
 Assert-Contains 'check-auth: names the cwd auth file' $script:Out '.stride_auth.md'
+
+# From a subdirectory of a git repository the project root's file is used.
+$gp = J 'gitproj'
+New-Item -ItemType Directory -Force -Path (Join-Path $gp 'sub/dir') | Out-Null
+& git -C $gp init -q
+Copy-Item (J 'auth.md') (Join-Path $gp '.stride_auth.md')
+Invoke-Ship check-toplevel @('--check-auth') -Auth '' -Cwd (Join-Path $gp 'sub/dir')
+Assert-Rc 'check-auth: from a subdirectory, finds .stride_auth.md at the git project root' 0
+Assert-Contains 'check-auth: names the project-root auth file' $script:Out (Join-Path 'gitproj' '.stride_auth.md')
 
 # --- --check-payload --------------------------------------------------------------
 
@@ -526,7 +535,9 @@ Assert-Lacks '--preview: no Python traceback' $script:Err 'Traceback'
 
 $Skill = [System.IO.File]::ReadAllText((Join-Path (Split-Path -Parent $ScriptDir) 'skills/stride-ideation-stridify/SKILL.md'))
 Assert-Contains 'SKILL: Step 3 preflight calls ship.py --check-auth' $Skill 'lib/ship.py" --check-auth || exit 1'
-Assert-Contains 'SKILL: Step 9 ships through one ship.py call' $Skill "python3 `"<plugin-root>/lib/ship.py`" '<value of BATCH_PATH>'"
+Assert-Contains 'SKILL: Step 9 ships through one ship.py call' $Skill 'python3 "$HELPER_ROOT/lib/ship.py" ''<value of BATCH_PATH>'''
+Assert-Lacks 'SKILL: no <plugin-root> placeholder remains' $Skill '<plugin-root>'
+Assert-Lacks 'SKILL: no CLAUDE_PROJECT_DIR reference remains' $Skill 'CLAUDE_PROJECT_DIR'
 Assert-Contains 'SKILL: --batch accepts the --batch=<value> form' $Skill '`--batch=<value>`'
 Assert-Contains 'SKILL: --batch with --goal is rejected' $Skill 'cannot be combined with --goal'
 Assert-Contains 'SKILL: --batch screens the file with --check-payload' $Skill 'ship.py" --check-payload'

@@ -10,7 +10,7 @@
 #       Dry-run mode. Uses fixtures/2026-05-12T120000-dark-mode-toggle-stride-batch.json.
 #
 #   pwsh -File lib\run_smoke_test.ps1 -Live <stride-batch.json>
-#       LIVE mode. Reads auth from $CLAUDE_PROJECT_DIR/.stride_auth.md
+#       LIVE mode. Reads auth from .stride_auth.md at the project root
 #       and POSTs the supplied batch to the Stride API. Use a dev
 #       Stride instance — this creates real tasks.
 #
@@ -247,7 +247,7 @@ if (Test-Path -LiteralPath $gateFixture) {
 #
 # Ships through lib/ship.py, the same single process the stridify skill's
 # Step 9 runs: it reads .stride_auth.md ($env:STRIDE_AUTH_FILE, else
-# $env:CLAUDE_PROJECT_DIR or the current directory), strips, validates, POSTs
+# the project root's .stride_auth.md, else the current directory's), strips, validates, POSTs
 # with the token on curl's stdin (never argv) and renders the created
 # identifiers. The token never enters this PowerShell session.
 

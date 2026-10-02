@@ -105,6 +105,11 @@ if [ -f "$A/stride-codex-ideation/lib/ship.py" ] && [ -f "$A/stride-codex-ideati
 else
   fail "fresh: namespaced helpers missing" "$(ls -R "$A/stride-codex-ideation" 2>&1 | head -20)"
 fi
+if [ -f "$A/stride-codex-ideation/agents/requirements-decomposer.md" ] && [ -f "$A/stride-codex-ideation/agents/requirements-reviewer.md" ]; then
+  pass "fresh: agent files are also installed under the helper root, where the skills look them up"
+else
+  fail "fresh: helper root has no agents/ copy"
+fi
 if [ -x "$A/stride-codex-ideation/lib/test-ship.sh" ]; then pass "fresh: the executable bit on .sh helpers is preserved"; else fail "fresh: .sh helpers lost their executable bit"; fi
 if [ ! -e "$A/lib" ] && [ ! -e "$A/fixtures" ]; then pass "fresh: nothing is written to the shared .agents/lib or .agents/fixtures"; else fail "fresh: shared lib/ or fixtures/ was created"; fi
 case "$OUT" in

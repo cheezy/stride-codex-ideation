@@ -16,7 +16,7 @@
 #       response-rendering code is also exercised.
 #
 #   ./lib/run_smoke_test.sh --live <stride-batch.json>
-#       LIVE mode. Reads auth from $CLAUDE_PROJECT_DIR/.stride_auth.md
+#       LIVE mode. Reads auth from .stride_auth.md at the project root
 #       and POSTs the supplied batch to the Stride API. Use a dev
 #       Stride instance — this creates real tasks.
 #
@@ -247,7 +247,7 @@ fi
 #
 # Ships through lib/ship.py, the same single process the stridify skill's
 # Step 9 runs: it reads .stride_auth.md ($STRIDE_AUTH_FILE, else
-# ${CLAUDE_PROJECT_DIR:-$PWD}/.stride_auth.md), strips, validates, POSTs with
+# the project root's .stride_auth.md, else ./.stride_auth.md), strips, validates, POSTs with
 # the token on curl's stdin (never argv) and renders the created identifiers.
 # The token never enters this shell.
 

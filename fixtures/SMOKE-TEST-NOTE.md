@@ -27,7 +27,7 @@ Result: **14 ✓, 0 ✗**, `14 passed, 0 failed`.
 # Dry mode (safe — no network call):
 ./lib/run_smoke_test.sh
 
-# Live mode — POSTs to the Stride API in $CLAUDE_PROJECT_DIR/.stride_auth.md.
+# Live mode — POSTs to the Stride API named in the project root's .stride_auth.md.
 # Use a dev Stride instance. Created tasks are NOT auto-cleaned.
 ./lib/run_smoke_test.sh --live fixtures/2026-05-12T120000-dark-mode-toggle-stride-batch.json
 ```

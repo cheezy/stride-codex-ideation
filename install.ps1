@@ -292,6 +292,8 @@ try {
     $fixDest = Join-Path $HelperRoot 'fixtures'
     New-Item -ItemType Directory -Force -Path $libDest | Out-Null
     New-Item -ItemType Directory -Force -Path $fixDest | Out-Null
+    $agentsDest = Join-Path $HelperRoot 'agents'
+    New-Item -ItemType Directory -Force -Path $agentsDest | Out-Null
 
     # Copy lib/ helpers (.sh, .ps1, .py). The stridify skill body and the
     # smoke test invoke them directly.
@@ -305,6 +307,14 @@ try {
     Write-Host "Installing fixtures..."
     foreach ($item in @(Get-ChildItem -LiteralPath (Join-Path $cloneDir 'fixtures') -Force)) {
         Copy-Item -LiteralPath $item.FullName -Destination $fixDest -Recurse -Force
+    }
+
+    # A second copy of the agent files beside the helpers: the skills locate
+    # an agent's instructions at <helper root>/agents/<name>.md, the same
+    # relative path a marketplace plugin directory has, so one lookup serves
+    # every install.
+    foreach ($agentFile in $agentFiles) {
+        Copy-Item -LiteralPath $agentFile.FullName -Destination $agentsDest -Force
     }
 
     # Copy AGENTS.md to the destination. Preserve any existing user-authored

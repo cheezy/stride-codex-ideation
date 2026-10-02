@@ -93,8 +93,11 @@ confined to a clearly delimited **managed block** (`<!-- BEGIN stride-ideation -
 ├── agents/<agent>.md             where Codex discovers agents
 └── stride-codex-ideation/        this plugin's helper root
     ├── lib/                      helper scripts the skills run
+    ├── agents/                   the agent files the skills dispatch
     └── fixtures/                 calibration fixtures for the smoke test
 ```
+
+The skills find the helper root themselves, tied to where Codex loaded them from: `$STRIDE_IDEATION_HOME` if you set it, else the `stride-codex-ideation/` directory of the `.agents/` install the skill was loaded from (the project install or the global one, whichever Codex used), else the plugin directory of a marketplace install. A repository's own `.agents/stride-codex-ideation/` is never picked up just because it exists — the helpers are executed, so they come only from an install Codex already loaded. If nothing qualifies, the skill stops and names every path it tried. Set `STRIDE_IDEATION_HOME` to a checkout of this repository to run the skills against it directly.
 
 The helper root is this plugin's own directory, so no other tool installing into the same `.agents/` can overwrite its helpers. Each install clears and rewrites it, so files a newer release no longer ships disappear; nothing outside it is ever deleted. The installer prints the resolved helper root at the end. Releases before this layout copied the helpers into the shared `<install-dir>/lib/` and `<install-dir>/fixtures/`; the installer points those out when it finds them but never deletes them, since other tools may use the same directories.
 
@@ -109,9 +112,9 @@ cp -r stride-codex-ideation/skills/. .agents/skills/
 cp -r stride-codex-ideation/agents/. .agents/agents/
 cp stride-codex-ideation/AGENTS.md AGENTS.md
 
-# The helpers and fixtures go in the plugin's own helper root — the
-# skills resolve them via <plugin-root>/lib/.
-cp -R stride-codex-ideation/lib stride-codex-ideation/fixtures .agents/stride-codex-ideation/
+# The helpers, fixtures and a copy of the agents go in the plugin's own
+# helper root, where the skills look them up.
+cp -R stride-codex-ideation/lib stride-codex-ideation/fixtures stride-codex-ideation/agents .agents/stride-codex-ideation/
 ```
 
 On Windows, use `Copy-Item -Recurse` for the equivalent.

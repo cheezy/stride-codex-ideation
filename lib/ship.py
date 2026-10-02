@@ -9,7 +9,8 @@ Usage:
 
 On Windows `python3` may be named `python` or `py -3`; the script is the same.
 
-Auth file: $STRIDE_AUTH_FILE if set, else ${CLAUDE_PROJECT_DIR:-<cwd>}/.stride_auth.md
+Auth file: $STRIDE_AUTH_FILE if set, else .stride_auth.md at the project root
+(git rev-parse --show-toplevel), else .stride_auth.md in the current directory.
 
 Why one script: the stride-ideation-stridify skill's Steps 3, 9 and 10 used to
 be separate bash fragments that Codex ran in separate shell calls. Shell state
@@ -99,12 +100,37 @@ def run_helper(script: str, *args: str, stdout: "object" = subprocess.PIPE, stde
     )
 
 
+def project_root() -> "str | None":
+    """The git toplevel of the current directory, or None outside a repo."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=child_env(),
+        )
+    except OSError:
+        return None
+    top = result.stdout.decode("utf-8", "replace").strip()
+    return top if result.returncode == 0 and top else None
+
+
 def auth_file_path() -> str:
+    """$STRIDE_AUTH_FILE, else the project root's .stride_auth.md, else the cwd's.
+
+    The first existing file wins; when neither exists the project-root path is
+    reported, so a run from a subdirectory names the file the user expects.
+    """
     explicit = os.environ.get("STRIDE_AUTH_FILE")
     if explicit:
         return explicit
-    root = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
-    return os.path.join(root, ".stride_auth.md")
+    candidates = []
+    top = project_root()
+    if top:
+        candidates.append(os.path.join(top, ".stride_auth.md"))
+    candidates.append(os.path.join(os.getcwd(), ".stride_auth.md"))
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+    return candidates[0]
 
 
 def parse_auth(stdout: bytes) -> "tuple[str, str]":

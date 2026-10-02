@@ -276,10 +276,21 @@ mkdir -p "$TMP/proj"
 cp "$TMP/auth.md" "$TMP/proj/.stride_auth.md"
 C="$TMP/case-check-cwd"
 mkdir -p "$C/log" "$C/tmpdir"
-(cd "$TMP/proj" && env -u STRIDE_AUTH_FILE -u CLAUDE_PROJECT_DIR PATH="$TMP/bin:$PATH" TMPDIR="$C/tmpdir" \
+(cd "$TMP/proj" && env -u STRIDE_AUTH_FILE PATH="$TMP/bin:$PATH" TMPDIR="$C/tmpdir" \
   FAKE_LOG_DIR="$C/log" python3 "$SHIP" --check-auth > "$C/out" 2> "$C/err"; echo "$?" > "$C/rc")
 rc_is "check-auth: finds .stride_auth.md in the current directory" 0
 contains "check-auth: names the cwd auth file" "$C/out" "proj/.stride_auth.md"
+
+# From a subdirectory of a git repository the project root's file is used.
+mkdir -p "$TMP/gitproj/sub/dir"
+git -C "$TMP/gitproj" init -q
+cp "$TMP/auth.md" "$TMP/gitproj/.stride_auth.md"
+C="$TMP/case-check-toplevel"
+mkdir -p "$C/log" "$C/tmpdir"
+(cd "$TMP/gitproj/sub/dir" && env -u STRIDE_AUTH_FILE PATH="$TMP/bin:$PATH" TMPDIR="$C/tmpdir" \
+  FAKE_LOG_DIR="$C/log" python3 "$SHIP" --check-auth > "$C/out" 2> "$C/err"; echo "$?" > "$C/rc")
+rc_is "check-auth: from a subdirectory, finds .stride_auth.md at the git project root" 0
+contains "check-auth: names the project-root auth file" "$C/out" "gitproj/.stride_auth.md"
 
 # --- --check-payload --------------------------------------------------------------
 
@@ -593,7 +604,9 @@ lacks "--preview: no Python traceback" "$C/err" "Traceback"
 
 SKILL="$SCRIPT_DIR/../skills/stride-ideation-stridify/SKILL.md"
 contains "SKILL: Step 3 preflight calls ship.py --check-auth" "$SKILL" 'lib/ship.py" --check-auth || exit 1'
-contains "SKILL: Step 9 ships through one ship.py call" "$SKILL" "python3 \"<plugin-root>/lib/ship.py\" '<value of BATCH_PATH>'"
+contains "SKILL: Step 9 ships through one ship.py call" "$SKILL" "python3 \"\$HELPER_ROOT/lib/ship.py\" '<value of BATCH_PATH>'"
+lacks "SKILL: no <plugin-root> placeholder remains" "$SKILL" "<plugin-root>"
+lacks "SKILL: no CLAUDE_PROJECT_DIR reference remains" "$SKILL" "CLAUDE_PROJECT_DIR"
 contains "SKILL: --batch accepts the --batch=<value> form" "$SKILL" '`--batch=<value>`'
 contains "SKILL: --batch with --goal is rejected" "$SKILL" "cannot be combined with --goal"
 contains "SKILL: --batch screens the file with --check-payload" "$SKILL" "ship.py\" --check-payload"

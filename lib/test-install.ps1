@@ -138,6 +138,7 @@ Check 'fresh: install.ps1 runs in global mode with USERPROFILE unset (HOME fallb
 Check 'fresh: AGENTS.md is exactly the managed block' (Same-Bytes (J 'expected-block.md') (Join-Path $A 'AGENTS.md'))
 Check 'fresh: 3 skills and 2 agents land where Codex discovers them' ((@(Get-ChildItem -LiteralPath (Join-Path $A 'skills') -Directory).Count -eq 3) -and (@(Get-ChildItem -LiteralPath (Join-Path $A 'agents') -Filter '*.md' -File).Count -eq 2))
 Check 'fresh: helpers and fixtures install under the namespaced stride-codex-ideation/ dir' ((Test-Path -LiteralPath (Join-Path $HR 'lib/ship.py')) -and (Test-Path -LiteralPath (Join-Path $HR 'lib/filename.sh')) -and (Test-Path -LiteralPath (Join-Path $HR 'fixtures/README.md')))
+Check 'fresh: agent files are also installed under the helper root, where the skills look them up' ((Test-Path -LiteralPath (Join-Path $HR 'agents/requirements-decomposer.md')) -and (Test-Path -LiteralPath (Join-Path $HR 'agents/requirements-reviewer.md')))
 Check 'fresh: nothing is written to the shared .agents/lib or .agents/fixtures' (-not (Test-Path -LiteralPath (Join-Path $A 'lib')) -and -not (Test-Path -LiteralPath (Join-Path $A 'fixtures')))
 Check 'fresh: the resolved helper root is printed' ($script:Out.Contains('Helper root: ' + (Resolve-Path -LiteralPath $HR).Path)) $script:Out
 Check 'fresh: INSTALL_SOURCE_DIR installs from the checkout without cloning' (-not $script:Out.Contains('fake git'))

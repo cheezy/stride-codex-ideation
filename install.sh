@@ -129,7 +129,7 @@ elif [ -d "$HELPER_ROOT" ]; then
   esac
   rm -rf -- "$HELPER_ROOT"
 fi
-mkdir -p "$HELPER_ROOT/lib" "$HELPER_ROOT/fixtures"
+mkdir -p "$HELPER_ROOT/lib" "$HELPER_ROOT/fixtures" "$HELPER_ROOT/agents"
 
 # Copy lib/ helpers (.sh, .ps1, .py). Use cp -a to preserve the executable
 # bit on the .sh files — the stridify skill body and the smoke test invoke
@@ -141,6 +141,11 @@ cp -a "$SRC/lib/." "$HELPER_ROOT/lib/"
 # references the README and SMOKE-TEST-NOTE.md point at.
 echo "Installing fixtures..."
 cp -a "$SRC/fixtures/." "$HELPER_ROOT/fixtures/"
+
+# A second copy of the agent files beside the helpers: the skills locate an
+# agent's instructions at <helper root>/agents/<name>.md, the same relative
+# path a marketplace plugin directory has, so one lookup serves every install.
+cp "$SRC/agents/"*.md "$HELPER_ROOT/agents/"
 
 # Copy AGENTS.md to the destination (project root in project mode, or the
 # global install dir in global mode). Preserve any existing user-authored
